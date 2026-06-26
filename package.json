@@ -1,0 +1,11 @@
+{
+  "name": "magic-window",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.21"
+  }
+}

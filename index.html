@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Magic Window</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #status {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #fff;
+      font: 13px monospace;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <video id="webcam" autoplay muted playsinline style="display:none"></video>
+  <canvas id="canvas"></canvas>
+  <div id="status">Loading...</div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
