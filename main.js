@@ -51,13 +51,6 @@ function calculateViewer(result) {
 
   const m = new THREE.Matrix4().fromArray(result.facialTransformationMatrixes[0].data);
 
-  // Print raw camera-space position once per second for coordinate system debugging
-  const rawPos = new Vector3().setFromMatrixPosition(m);
-  if (!calculateViewer._lastLog || Date.now() - calculateViewer._lastLog > 1000) {
-    calculateViewer._lastLog = Date.now();
-    console.log(`raw pos  x:${rawPos.x.toFixed(3)}  y:${rawPos.y.toFixed(3)}  z:${rawPos.z.toFixed(3)}`);
-  }
-
   // extract viewer position in camera space
   const viewerPositionCameraSpace = new Vector3().setFromMatrixPosition(m);
   viewerPositionCameraSpace.z *= -1;
@@ -155,6 +148,10 @@ let threeRenderer;
 let sceneMesh;
 let threeScene;
 let threeCamera;
+let renderTarget;
+let blitScene;
+let blitCamera;
+let resScale = 1.0;
 
 function loop() {
   requestAnimationFrame(loop);
@@ -162,10 +159,9 @@ function loop() {
   const result = landmarker.detectForVideo(video, Date.now());
   calculateViewer(result);
 
-  const p = viewerPosition;
-  status.textContent = result.facialTransformationMatrixes?.length
-    ? `pos  x:${p.x.toFixed(2)} y:${p.y.toFixed(2)} z:${p.z.toFixed(2)}\ndistance  ${viewerDistance.toFixed(3)}`
-    : 'no face detected';
+  const tracked = result.facialTransformationMatrixes?.length;
+  status.textContent = tracked ? '' : 'no face detected';
+  status.style.color  = tracked ? '' : '#f44';
 
   if (viewerForward.lengthSq() > 0) {
     const forward = viewerForward.clone().normalize();
@@ -177,7 +173,10 @@ function loop() {
     sceneMesh.scale.set(s, s, s);
   }
 
+  threeRenderer.setRenderTarget(renderTarget);
   threeRenderer.render(threeScene, threeCamera);
+  threeRenderer.setRenderTarget(null);
+  threeRenderer.render(blitScene, blitCamera);
 }
 
 
@@ -190,10 +189,41 @@ async function init() {
   threeScene    = new THREE.Scene();
   threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   threeRenderer.setSize(window.innerWidth, window.innerHeight);
-  window.addEventListener('resize', () => {
-    threeCamera.aspect = window.innerWidth / window.innerHeight;
+
+  blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  blitScene  = new THREE.Scene();
+
+  threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+  threeCamera.position.set(0, 0, 0);
+  threeCamera.up.set(0, 1, 0);
+  threeCamera.lookAt(-1, 0, 0);
+
+  function setResolution(scale) {
+    const w = Math.max(1, Math.round(window.innerWidth  * scale));
+    const h = Math.max(1, Math.round(window.innerHeight * scale));
+    if (renderTarget) renderTarget.dispose();
+    renderTarget = new THREE.WebGLRenderTarget(w, h, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+    });
+    if (blitScene.children.length) blitScene.remove(blitScene.children[0]);
+    const blitMat  = new THREE.MeshBasicMaterial({ map: renderTarget.texture });
+    blitScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blitMat));
+    threeCamera.aspect = w / h;
     threeCamera.updateProjectionMatrix();
+  }
+
+  setResolution(resScale);
+
+  window.addEventListener('resize', () => {
     threeRenderer.setSize(window.innerWidth, window.innerHeight);
+    setResolution(resScale);
+  });
+
+  document.getElementById('slider-res').addEventListener('input', e => {
+    resScale = parseInt(e.target.value) / 100;
+    document.getElementById('res-label').textContent = e.target.value + '%';
+    setResolution(resScale);
   });
 
   // Webcam
@@ -213,13 +243,6 @@ async function init() {
   });
 
   defaultValues();
-
-  // Screen: position (0,0,0), normal (1,0,0), up (0,1,0)
-  // Camera sits at screen, looks into scene (-x direction = behind screen)
-  threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
-  threeCamera.position.set(0, 0, 0);
-  threeCamera.up.set(0, 1, 0);
-  threeCamera.lookAt(-1, 0, 0);
 
   const bgMaterial = new THREE.ShaderMaterial({
     depthWrite: false,
