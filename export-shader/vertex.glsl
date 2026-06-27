@@ -14,8 +14,9 @@ void main() {
   vNormal = normalize(normalMatrix * normal);
   vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
   vBary = aBary;
-  vEdgeLenAB = aEdgeLenAB;
-  vEdgeLenAC = aEdgeLenAC;
+  float worldScale = length(modelMatrix[0].xyz);
+  vEdgeLenAB = aEdgeLenAB * worldScale;
+  vEdgeLenAC = aEdgeLenAC * worldScale;
   vTriSeed = aTriSeed;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }

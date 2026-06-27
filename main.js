@@ -1,6 +1,7 @@
 import { FaceLandmarker, FilesetResolver } from './node_modules/@mediapipe/tasks-vision/vision_bundle.mjs';
 import * as THREE from './node_modules/three/build/three.module.js';
 import { Vector2, Vector3 } from './node_modules/three/build/three.module.js';
+import { TeapotGeometry } from './node_modules/three/examples/jsm/geometries/TeapotGeometry.js';
 
 const WASM_PATH  = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH = './models/face_landmarker.task';
@@ -25,75 +26,6 @@ const CONFIG = {
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Shaders ───────────────────────────────────────────────────────────────────
-const VERT = `#version 300 es
-in vec2 a_pos;
-void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }`;
-
-// Coordinate system: screen at x=0, viewer in +x half-space, y=up, z=right. Units: cm.
-//
-// Available uniforms:
-//   u_resolution : vec2  — canvas size in pixels
-//   u_screenSize : vec2  — physical screen (width, height) in cm
-//   u_time       : float — seconds since start
-//   u_eyePos     : vec3  — viewer eye in world space (cm)
-//                          .x = distance in front of screen
-//                          .y = height (0 = screen center)
-//                          .z = lateral (0 = screen center, +z = right)
-//
-// Per-pixel ray (for raymarching):
-//   vec2 ndc      = gl_FragCoord.xy / u_resolution;
-//   vec3 pixelPos = vec3(0.0, (ndc.y-0.5)*u_screenSize.y, (ndc.x-0.5)*u_screenSize.x);
-//   vec3 rayDir   = normalize(pixelPos - u_eyePos);
-//   vec3 rayOri   = u_eyePos;
-const FRAG = `#version 300 es
-precision mediump float;
-
-uniform vec2  u_resolution;
-uniform vec2  u_screenSize;
-uniform float u_time;
-uniform vec3  u_eyePos;
-
-out vec4 fragColor;
-
-float circle(vec2 uv, vec2 c, float r) {
-  return smoothstep(r, r - 0.003, length(uv - c));
-}
-
-// Screen UV [0,1]^2 of where the ray hits a virtual plane x = -depth (behind screen)
-vec2 uvAtDepth(vec3 eye, vec3 dir, float depth) {
-  float t   = (-depth - eye.x) / dir.x;
-  vec3  hit = eye + dir * t;
-  return vec2(hit.z / u_screenSize.x + 0.5,
-              hit.y / u_screenSize.y + 0.5);
-}
-
-void main() {
-  vec2 ndc = gl_FragCoord.xy / u_resolution;
-
-  // Physical position of this pixel on the screen plane (cm)
-  vec3 pixelPos = vec3(0.0,
-    (ndc.y - 0.5) * u_screenSize.y,
-    (ndc.x - 0.5) * u_screenSize.x);
-
-  // Ray from viewer's eye through this screen pixel into the virtual scene
-  vec3 rayDir = normalize(pixelPos - u_eyePos);
-
-  // Background
-  vec3 col = mix(vec3(0.04, 0.04, 0.12), vec3(0.08, 0.03, 0.18), ndc.y);
-
-  // Mid layer — 20 cm behind screen
-  vec2 midUV = uvAtDepth(u_eyePos, rayDir, 0.20);
-  col = mix(col, vec3(0.25, 0.15, 0.75), circle(midUV, vec2(0.5, 0.5), 0.18));
-
-  // Foreground — 5 cm behind screen
-  vec2 fgUV = uvAtDepth(u_eyePos, rayDir, 0.05);
-  col = mix(col, vec3(0.95, 0.38, 0.08), circle(fgUV, vec2(0.35, 0.55), 0.09));
-  col = mix(col, vec3(0.08, 0.82, 0.48), circle(fgUV, vec2(0.65, 0.45), 0.07));
-
-  fragColor = vec4(col, 1.0);
-}`;
-// ─────────────────────────────────────────────────────────────────────────────
 
 // Screen: position (0,0,0), forward (= screen surface normal) (1,0,0), up (0,1,0)
 let screenSize;
@@ -154,22 +86,65 @@ function scaling(){
 }
 
 
-// ── WebGL helpers ─────────────────────────────────────────────────────────────
-function compileShader(gl, type, src) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-  return s;
+// ── Mesh building ─────────────────────────────────────────────────────────────
+let triSeedCounter = 0;
+
+function addTriangleAttribs(geo) {
+  const g = geo.toNonIndexed();
+  const pos = g.getAttribute('position');
+  const triCount = Math.floor(pos.count / 3);
+
+  const bary     = new Float32Array(pos.count * 2);
+  const eLenAB   = new Float32Array(pos.count);
+  const eLenAC   = new Float32Array(pos.count);
+  const triSeeds = new Float32Array(pos.count);
+
+  function absCosAt(p, q, r) {
+    const ex = q[0]-p[0], ey = q[1]-p[1], ez = q[2]-p[2];
+    const fx = r[0]-p[0], fy = r[1]-p[1], fz = r[2]-p[2];
+    const le = Math.hypot(ex, ey, ez), lf = Math.hypot(fx, fy, fz);
+    if (le < 1e-10 || lf < 1e-10) return 1;
+    return Math.abs((ex*fx + ey*fy + ez*fz) / (le * lf));
+  }
+
+  for (let i = 0; i < triCount; i++) {
+    const b = i * 3;
+    const p = [
+      [pos.getX(b),   pos.getY(b),   pos.getZ(b)],
+      [pos.getX(b+1), pos.getY(b+1), pos.getZ(b+1)],
+      [pos.getX(b+2), pos.getY(b+2), pos.getZ(b+2)],
+    ];
+
+    const d = [absCosAt(p[0],p[1],p[2]), absCosAt(p[1],p[0],p[2]), absCosAt(p[2],p[0],p[1])];
+    const iA = d[0] <= d[1] && d[0] <= d[2] ? 0 : d[1] <= d[2] ? 1 : 2;
+    const [iB, iC] = [[1,2],[0,2],[0,1]][iA];
+
+    const lAB = Math.hypot(...p[iB].map((v,k) => v - p[iA][k]));
+    const lAC = Math.hypot(...p[iC].map((v,k) => v - p[iA][k]));
+    const seed = triSeedCounter++;
+
+    bary[(b+iA)*2]=0; bary[(b+iA)*2+1]=0;
+    bary[(b+iB)*2]=1; bary[(b+iB)*2+1]=0;
+    bary[(b+iC)*2]=0; bary[(b+iC)*2+1]=1;
+
+    for (let k = 0; k < 3; k++) {
+      eLenAB[b+k]   = lAB;
+      eLenAC[b+k]   = lAC;
+      triSeeds[b+k] = seed;
+    }
+  }
+
+  g.setAttribute('aBary',      new THREE.BufferAttribute(bary,     2));
+  g.setAttribute('aEdgeLenAB', new THREE.BufferAttribute(eLenAB,   1));
+  g.setAttribute('aEdgeLenAC', new THREE.BufferAttribute(eLenAC,   1));
+  g.setAttribute('aTriSeed',   new THREE.BufferAttribute(triSeeds, 1));
+  return g;
 }
 
-function createProgram(gl, vert, frag) {
-  const p = gl.createProgram();
-  gl.attachShader(p, compileShader(gl, gl.VERTEX_SHADER,   vert));
-  gl.attachShader(p, compileShader(gl, gl.FRAGMENT_SHADER, frag));
-  gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-  return p;
+function buildMesh(vertSrc, fragSrc, geometry) {
+  const geo = addTriangleAttribs(geometry);
+  const mat = new THREE.ShaderMaterial({ vertexShader: vertSrc, fragmentShader: fragSrc, side: THREE.DoubleSide });
+  return new THREE.Mesh(geo, mat);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -177,7 +152,7 @@ let status;
 let video;
 let landmarker;
 let threeRenderer;
-let debugCube;
+let sceneMesh;
 let threeScene;
 let threeCamera;
 
@@ -192,15 +167,14 @@ function loop() {
     ? `pos  x:${p.x.toFixed(2)} y:${p.y.toFixed(2)} z:${p.z.toFixed(2)}\ndistance  ${viewerDistance.toFixed(3)}`
     : 'no face detected';
 
-  // Rotate debug cube to match viewer head orientation (same coordinate system, no remapping)
   if (viewerForward.lengthSq() > 0) {
     const forward = viewerForward.clone().normalize();
     const up = viewerUp.clone().normalize();
     const right = new THREE.Vector3().crossVectors(up, forward).normalize();
     const m = new THREE.Matrix4().makeBasis(right, up, forward);
-    debugCube.setRotationFromMatrix(m);
+    sceneMesh.setRotationFromMatrix(m);
     const s = scaling();
-    debugCube.scale.set(s, s, s);
+    sceneMesh.scale.set(s, s, s);
   }
 
   threeRenderer.render(threeScene, threeCamera);
@@ -247,15 +221,33 @@ async function init() {
   threeCamera.up.set(0, 1, 0);
   threeCamera.lookAt(-1, 0, 0);
 
-  threeRenderer.setClearColor(0x111111);
+  const bgMaterial = new THREE.ShaderMaterial({
+    depthWrite: false,
+    vertexShader: `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
+    fragmentShader: `
+      float rand(vec2 co) {
+        return fract(sin(dot(co, vec2(127.1, 311.7))) * 43758.5453);
+      }
+      void main() {
+        gl_FragColor = vec4(vec3(rand(floor(gl_FragCoord.xy))), 1.0);
+      }
+    `,
+  });
+  const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial);
+  bgMesh.renderOrder = -1;
+  bgMesh.frustumCulled = false;
+  threeScene.add(bgMesh);
 
-  // Cube 2 units behind screen
-  debugCube = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshNormalMaterial()
-  );
-  debugCube.position.set(-2, 0, 0);
-  threeScene.add(debugCube);
+  status.textContent = 'Loading shaders…';
+  const [vertSrc, fragSrc] = await Promise.all([
+    fetch('./export-shader/vertex.glsl').then(r => r.text()),
+    fetch('./export-shader/fragment.glsl').then(r => r.text()),
+  ]);
+
+  // Swap geometry here: new THREE.BoxGeometry(1, 1, 1), new TeapotGeometry(1), etc.
+  sceneMesh = buildMesh(vertSrc, fragSrc, new TeapotGeometry(0.65));
+  sceneMesh.position.set(-2, 0, 0);
+  threeScene.add(sceneMesh);
 
   status.textContent = 'Running';
   requestAnimationFrame(loop);

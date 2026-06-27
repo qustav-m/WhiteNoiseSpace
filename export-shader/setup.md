@@ -29,10 +29,12 @@ import * as THREE from 'three';
 import vertSrc from './vertex.glsl';
 import fragSrc from './fragment.glsl';
 
-const material = new THREE.RawShaderMaterial({
+// ShaderMaterial (not RawShaderMaterial) — Three.js injects the built-in uniforms
+// (modelViewMatrix, projectionMatrix, normalMatrix) and attributes (position, normal)
+// that the vertex shader relies on, and maps varying/gl_FragColor to GLSL3 equivalents.
+const material = new THREE.ShaderMaterial({
   vertexShader:   vertSrc,
   fragmentShader: fragSrc,
-  glslVersion: THREE.GLSL3,  // required — shader uses uint, bitwise ops
 });
 ```
 
