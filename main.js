@@ -72,13 +72,6 @@ function transformToWorld(vector, forward, up, worldOrigin = new Vector3()) {
   return vector.clone().applyMatrix4(matrix).add(worldOrigin);
 }
 
-let startScale = 0.7;
-let maximumDistance = 100;
-function scaling(){
-    return (viewerDistance/maximumDistance) * (1 - startScale) + startScale;
-}
-
-
 // ── Mesh building ─────────────────────────────────────────────────────────────
 let triSeedCounter = 0;
 
@@ -140,6 +133,12 @@ function buildMesh(vertSrc, fragSrc, geometry) {
   return new THREE.Mesh(geo, mat);
 }
 // ─────────────────────────────────────────────────────────────────────────────
+let cmPerUnit = 10.0;
+let digitalCameraMaxDistance = 5.0;
+
+function moveDigitalCamera(){
+  threeCamera.position.x = Math.max(0,(digitalCameraMaxDistance - (viewerDistance/cmPerUnit)));
+}
 
 let status;
 let video;
@@ -158,6 +157,7 @@ function loop() {
 
   const result = landmarker.detectForVideo(video, Date.now());
   calculateViewer(result);
+  moveDigitalCamera();
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';
@@ -169,8 +169,6 @@ function loop() {
     const right = new THREE.Vector3().crossVectors(up, forward).normalize();
     const m = new THREE.Matrix4().makeBasis(right, up, forward);
     sceneMesh.setRotationFromMatrix(m);
-    const s = scaling();
-    sceneMesh.scale.set(s, s, s);
   }
 
   threeRenderer.setRenderTarget(renderTarget);
