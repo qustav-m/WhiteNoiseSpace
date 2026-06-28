@@ -33,12 +33,20 @@ let cameraForward;
 let cameraUp;
 let cameraPosition;
 
-function defaultValues() {
+function setUpDefault() {
   // MacBook Pro 14" M3 defaults
   screenSize     = new Vector2(30.5, 19.5);               // cm, active display area
   cameraPosition = new Vector3(0, screenSize.y / 2, 0);  // cm — top center of screen
   cameraForward  = new Vector3(1, 0, 0);                  // camera faces viewer (+x)
   cameraUp       = new Vector3(0, 1, 0);                  // camera up is world up (+y)
+}
+
+function setUpHome() {
+  // MacBook Pro 14" M3 defaults
+  screenSize     = new Vector2(62, 34);
+  cameraPosition = new Vector3(23, 8, 65);  
+  cameraForward  = (new Vector3(1, 0, -1)).normalize();
+  cameraUp       = new Vector3(0, 1, 0);
 }
 
 let viewerForward = new Vector3(0, 0, 0);
@@ -182,7 +190,7 @@ async function init() {
   status = document.getElementById('status');
   video  = document.getElementById('webcam');
 
-  // Three.js scene — set up after defaultValues() so screen variables are ready
+  // Three.js scene — set up after setUpDefault() so screen variables are ready
   const canvas = document.getElementById('canvas');
   threeScene    = new THREE.Scene();
   threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -240,7 +248,7 @@ async function init() {
     outputFacialTransformationMatrixes: true,
   });
 
-  defaultValues();
+  setUpDefault();
 
   const bgMaterial = new THREE.ShaderMaterial({
     depthWrite: false,
