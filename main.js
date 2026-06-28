@@ -134,7 +134,7 @@ function buildMesh(vertSrc, fragSrc, geometry) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 let cmPerUnit = 10.0;
-let digitalCameraMaxDistance = 5.0;
+let digitalCameraMaxDistance = 10.0; //the digital camera is at its standard position at (0 0 0), when the viwer is digitalCameraMaxDistance * cmPerUnit cm from the screen away
 
 function moveDigitalCamera(){
   threeCamera.position.x = Math.max(0,(digitalCameraMaxDistance - (viewerDistance/cmPerUnit)));
