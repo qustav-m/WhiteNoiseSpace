@@ -1,163 +1,17 @@
 import { FaceLandmarker, FilesetResolver } from './node_modules/@mediapipe/tasks-vision/vision_bundle.mjs';
 import * as THREE from './node_modules/three/build/three.module.js';
-import { Vector2, Vector3 } from './node_modules/three/build/three.module.js';
 import { TeapotGeometry } from './node_modules/three/examples/jsm/geometries/TeapotGeometry.js';
+import { calculateViewer, viewerForward, viewerUp, setUpDefault } from './viewer.js';
+import { buildMesh } from './geometry.js';
+import { moveDigitalCamera } from './animation.js';
 
 const WASM_PATH  = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH = './models/face_landmarker.task';
 
-// ── Configuration ─────────────────────────────────────────────────────────────
-// Screen: fixed at origin (0,0,0), normal (1,0,0), plane is y-z
-// Axes:   x = toward viewer, y = up, z = right
-const CONFIG = {
-  screen: {
-    width:  34,    // cm — physical screen width
-    height: 21,    // cm — physical screen height
-  },
-  camera: {
-    position: [1, 9, 0],    // cm — [forward (+x), up (+y), right (+z)] from screen center
-    normal:   [1, -0.2, 0], // direction camera faces (normalized at runtime)
-    hFov:     80,           // horizontal field of view in degrees
-  },
-  face: {
-    outerEyeDist: 0.090,    // meters — reference distance between outer eye corners
-  },
-  smoothing: 0.85,
-};
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-// Screen: position (0,0,0), forward (= screen surface normal) (1,0,0), up (0,1,0)
-let screenSize;
-let cameraForward;
-let cameraUp;
-let cameraPosition;
-
-function setUpDefault() {
-  // MacBook Pro 14" M3 defaults
-  screenSize     = new Vector2(30.5, 19.5);               // cm, active display area
-  cameraPosition = new Vector3(0, screenSize.y / 2, 0);  // cm — top center of screen
-  cameraForward  = new Vector3(1, 0, 0);                  // camera faces viewer (+x)
-  cameraUp       = new Vector3(0, 1, 0);                  // camera up is world up (+y)
-}
-
-function setUpHome() {
-  // MacBook Pro 14" M3 defaults
-  screenSize     = new Vector2(62, 34);
-  cameraPosition = new Vector3(23, 8, 65);  
-  cameraForward  = (new Vector3(1, 0, -1)).normalize();
-  cameraUp       = new Vector3(0, 1, 0);
-}
-
-let viewerForward = new Vector3(0, 0, 0);
-let viewerUp = new Vector3(0, 0, 0);
-let viewerPosition = new Vector3(0, 0, 0);
-let viewerDistance = 0.0;
-
-function calculateViewer(result) {
-  if (!result.facialTransformationMatrixes?.length) return;
-
-  const m = new THREE.Matrix4().fromArray(result.facialTransformationMatrixes[0].data);
-
-  // extract viewer position in camera space
-  const viewerPositionCameraSpace = new Vector3().setFromMatrixPosition(m);
-  viewerPositionCameraSpace.z *= -1;
-  //calculate viewer position in world space
-  viewerPosition.copy(transformToWorld(viewerPositionCameraSpace, cameraForward, cameraUp, cameraPosition));
-  viewerDistance = viewerPosition.length();
-  //calculate the direction vector from the viewer to the screen center at (0, 0, 0)a nd use it as an aproximation for the viewer head roation
-  viewerForward.copy(viewerPosition.clone().negate().normalize());
-  const viewerRight = new Vector3().crossVectors(new Vector3(0, 1, 0), viewerForward).normalize();
-  viewerUp.copy(new Vector3().crossVectors(viewerForward, viewerRight).normalize());
-}
-
-// Transforms a vector from a local coordinate frame (defined by forward + up)
-// into world space.
-// worldOrigin: position of the local frame's origin in world coordinates (default = world origin)
-function transformToWorld(vector, forward, up, worldOrigin = new Vector3()) {
-  const right = new Vector3().crossVectors(forward, up).normalize();
-  const matrix = new THREE.Matrix4().makeBasis(right, up, forward);
-  return vector.clone().applyMatrix4(matrix).add(worldOrigin);
-}
-
-// ── Mesh building ─────────────────────────────────────────────────────────────
-let triSeedCounter = 0;
-
-function addTriangleAttribs(geo) {
-  const g = geo.toNonIndexed();
-  const pos = g.getAttribute('position');
-  const triCount = Math.floor(pos.count / 3);
-
-  const bary     = new Float32Array(pos.count * 2);
-  const eLenAB   = new Float32Array(pos.count);
-  const eLenAC   = new Float32Array(pos.count);
-  const triSeeds = new Float32Array(pos.count);
-
-  function absCosAt(p, q, r) {
-    const ex = q[0]-p[0], ey = q[1]-p[1], ez = q[2]-p[2];
-    const fx = r[0]-p[0], fy = r[1]-p[1], fz = r[2]-p[2];
-    const le = Math.hypot(ex, ey, ez), lf = Math.hypot(fx, fy, fz);
-    if (le < 1e-10 || lf < 1e-10) return 1;
-    return Math.abs((ex*fx + ey*fy + ez*fz) / (le * lf));
-  }
-
-  for (let i = 0; i < triCount; i++) {
-    const b = i * 3;
-    const p = [
-      [pos.getX(b),   pos.getY(b),   pos.getZ(b)],
-      [pos.getX(b+1), pos.getY(b+1), pos.getZ(b+1)],
-      [pos.getX(b+2), pos.getY(b+2), pos.getZ(b+2)],
-    ];
-
-    const d = [absCosAt(p[0],p[1],p[2]), absCosAt(p[1],p[0],p[2]), absCosAt(p[2],p[0],p[1])];
-    const iA = d[0] <= d[1] && d[0] <= d[2] ? 0 : d[1] <= d[2] ? 1 : 2;
-    const [iB, iC] = [[1,2],[0,2],[0,1]][iA];
-
-    const lAB = Math.hypot(...p[iB].map((v,k) => v - p[iA][k]));
-    const lAC = Math.hypot(...p[iC].map((v,k) => v - p[iA][k]));
-    const seed = triSeedCounter++;
-
-    bary[(b+iA)*2]=0; bary[(b+iA)*2+1]=0;
-    bary[(b+iB)*2]=1; bary[(b+iB)*2+1]=0;
-    bary[(b+iC)*2]=0; bary[(b+iC)*2+1]=1;
-
-    for (let k = 0; k < 3; k++) {
-      eLenAB[b+k]   = lAB;
-      eLenAC[b+k]   = lAC;
-      triSeeds[b+k] = seed;
-    }
-  }
-
-  g.setAttribute('aBary',      new THREE.BufferAttribute(bary,     2));
-  g.setAttribute('aEdgeLenAB', new THREE.BufferAttribute(eLenAB,   1));
-  g.setAttribute('aEdgeLenAC', new THREE.BufferAttribute(eLenAC,   1));
-  g.setAttribute('aTriSeed',   new THREE.BufferAttribute(triSeeds, 1));
-  return g;
-}
-
-function buildMesh(vertSrc, fragSrc, geometry) {
-  const geo = addTriangleAttribs(geometry);
-  const mat = new THREE.ShaderMaterial({ vertexShader: vertSrc, fragmentShader: fragSrc, side: THREE.DoubleSide });
-  return new THREE.Mesh(geo, mat);
-}
-// ─────────────────────────────────────────────────────────────────────────────
-let cmPerUnit = 10.0;
-let digitalCameraMaxDistance = 10.0; //the digital camera is at its standard position at (0 0 0), when the viwer is digitalCameraMaxDistance * cmPerUnit cm from the screen away
-
-function moveDigitalCamera(){
-  threeCamera.position.x = Math.max(0,(digitalCameraMaxDistance - (viewerDistance/cmPerUnit)));
-}
-
-let status;
-let video;
-let landmarker;
-let threeRenderer;
+let status, video, landmarker;
+let threeRenderer, threeScene, threeCamera;
 let sceneMesh;
-let threeScene;
-let threeCamera;
-let renderTarget;
-let blitScene;
-let blitCamera;
+let renderTarget, blitScene, blitCamera;
 let resScale = 1.0;
 
 function loop() {
@@ -165,7 +19,7 @@ function loop() {
 
   const result = landmarker.detectForVideo(video, Date.now());
   calculateViewer(result);
-  moveDigitalCamera();
+  moveDigitalCamera(threeCamera);
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';
@@ -173,10 +27,9 @@ function loop() {
 
   if (viewerForward.lengthSq() > 0) {
     const forward = viewerForward.clone().normalize();
-    const up = viewerUp.clone().normalize();
-    const right = new THREE.Vector3().crossVectors(up, forward).normalize();
-    const m = new THREE.Matrix4().makeBasis(right, up, forward);
-    sceneMesh.setRotationFromMatrix(m);
+    const up      = viewerUp.clone().normalize();
+    const right   = new THREE.Vector3().crossVectors(up, forward).normalize();
+    sceneMesh.setRotationFromMatrix(new THREE.Matrix4().makeBasis(right, up, forward));
   }
 
   threeRenderer.setRenderTarget(renderTarget);
@@ -185,13 +38,11 @@ function loop() {
   threeRenderer.render(blitScene, blitCamera);
 }
 
-
 async function init() {
   status = document.getElementById('status');
   video  = document.getElementById('webcam');
 
-  // Three.js scene — set up after setUpDefault() so screen variables are ready
-  const canvas = document.getElementById('canvas');
+  const canvas  = document.getElementById('canvas');
   threeScene    = new THREE.Scene();
   threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   threeRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -213,8 +64,10 @@ async function init() {
       magFilter: THREE.NearestFilter,
     });
     if (blitScene.children.length) blitScene.remove(blitScene.children[0]);
-    const blitMat  = new THREE.MeshBasicMaterial({ map: renderTarget.texture });
-    blitScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blitMat));
+    blitScene.add(new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.MeshBasicMaterial({ map: renderTarget.texture }),
+    ));
     threeCamera.aspect = w / h;
     threeCamera.updateProjectionMatrix();
   }
@@ -232,13 +85,11 @@ async function init() {
     setResolution(resScale);
   });
 
-  // Webcam
   status.textContent = 'Requesting camera…';
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
   video.srcObject = stream;
   await new Promise(r => video.addEventListener('loadeddata', r));
 
-  // MediaPipe face landmarker
   status.textContent = 'Loading face model…';
   const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
   landmarker = await FaceLandmarker.createFromOptions(vision, {
@@ -252,18 +103,14 @@ async function init() {
 
   const bgMaterial = new THREE.ShaderMaterial({
     depthWrite: false,
-    vertexShader: `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
+    vertexShader:   `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
     fragmentShader: `
-      float rand(vec2 co) {
-        return fract(sin(dot(co, vec2(127.1, 311.7))) * 43758.5453);
-      }
-      void main() {
-        gl_FragColor = vec4(vec3(rand(floor(gl_FragCoord.xy))), 1.0);
-      }
+      float rand(vec2 co) { return fract(sin(dot(co, vec2(127.1, 311.7))) * 43758.5453); }
+      void main() { gl_FragColor = vec4(vec3(rand(floor(gl_FragCoord.xy))), 1.0); }
     `,
   });
   const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial);
-  bgMesh.renderOrder = -1;
+  bgMesh.renderOrder   = -1;
   bgMesh.frustumCulled = false;
   threeScene.add(bgMesh);
 
@@ -273,7 +120,7 @@ async function init() {
     fetch('./export-shader/fragment.glsl').then(r => r.text()),
   ]);
 
-  // Swap geometry here: new THREE.BoxGeometry(1, 1, 1), new TeapotGeometry(1), etc.
+  // Swap geometry here: new THREE.BoxGeometry(1,1,1), new TeapotGeometry(1), etc.
   sceneMesh = buildMesh(vertSrc, fragSrc, new TeapotGeometry(0.65));
   sceneMesh.position.set(-2, 0, 0);
   threeScene.add(sceneMesh);
