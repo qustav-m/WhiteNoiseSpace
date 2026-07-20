@@ -4,7 +4,7 @@ import { TeapotGeometry } from 'three/examples/jsm/geometries/TeapotGeometry.js'
 import { calculateViewer, setUpDefault } from './viewer';
 import { buildMesh } from './geometry';
 import { update, setMode } from './animation';
-import { setMuted, tick as audioTick } from './audio';
+import { setMuted, tick as audioTick, initNoise } from './audio';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
@@ -130,6 +130,9 @@ async function init(): Promise<void> {
   bgMesh.renderOrder = -1;
   bgMesh.frustumCulled = false;
   threeScene.add(bgMesh);
+
+  status.textContent = 'Loading noise…';
+  await initNoise();
 
   status.textContent = 'Loading shaders…';
   const [vertSrc, fragSrc] = await Promise.all([
