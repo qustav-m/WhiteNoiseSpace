@@ -62,12 +62,20 @@ let contLastBeatTime: number = -1;
 let contStartCamX: number = 0;
 let contTargetCamX: number = 0;
 
+
+function progressCurve(t: number): number {
+  if (t >= fadeEnd) return 1.0;
+  const s: number = t / fadeEnd;
+  return s * s; // ease-out quadratic
+}
+/*
 // swappable decay curve: maps cycleT [0,1] → alpha [0,1], fast start, holds at 1
 function progressCurve(t: number): number {
   if (t >= fadeEnd) return 1.0;
   const s: number = t / fadeEnd;
   return 1 - (1 - s) * (1 - s); // ease-out quadratic
 }
+*/
 
 function updateContinuous(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
   if (contLastBeatTime < 0) {
