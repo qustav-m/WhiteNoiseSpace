@@ -22,7 +22,7 @@ function loop() {
   const result = landmarker.detectForVideo(video, now);
   calculateViewer(result);
   update(threeCamera, sceneMesh, now);
-  audioTick();
+  audioTick(now);
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';

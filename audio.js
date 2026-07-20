@@ -1,4 +1,4 @@
-import { currentAlpha } from './animation.js';
+import { currentAlpha, currentSpeed } from './animation.js';
 
 const audioCtx = new AudioContext();
 
@@ -15,17 +15,13 @@ function playClick() {
   osc.stop(audioCtx.currentTime + 0.05);
 }
 
-// ── Noise worklet ─────────────────────────────────────────────────────────────
-let noiseNode = null;
-let noiseGain = null;
-
-audioCtx.audioWorklet.addModule('./noise-processor.js').then(() => {
-  noiseNode = new AudioWorkletNode(audioCtx, 'noise-processor');
-  noiseGain = audioCtx.createGain();
-  noiseGain.gain.value = 0.3;
-  noiseNode.connect(noiseGain);
-  noiseGain.connect(audioCtx.destination);
-});
+// ── Tone source ───────────────────────────────────────────────────────────────
+const noiseSource = audioCtx.createOscillator();
+const noiseGain   = audioCtx.createGain();
+noiseGain.gain.value = 0;
+noiseSource.connect(noiseGain);
+noiseGain.connect(audioCtx.destination);
+noiseSource.start();
 
 // ── Mute / beat ───────────────────────────────────────────────────────────────
 let muted = false;
@@ -36,8 +32,18 @@ export function onBeat() {
   if (!muted) playClick();
 }
 
-export function tick() {
-  if (!noiseNode || !noiseGain) return;
-  noiseNode.parameters.get('alpha').value = currentAlpha;
-  noiseGain.gain.value = muted ? 0 : (1 - currentAlpha) * 0.3;
+let lastTickTime = -1;
+
+export function tick(now) {
+  const frameDelta = lastTickTime > 0 ? (now - lastTickTime) / 1000 : 0.016;
+  lastTickTime = now;
+
+  const targetFreq = 440 - 220 * currentAlpha; // 440 Hz → 220 Hz
+  noiseSource.frequency.cancelAndHoldAtTime(audioCtx.currentTime);
+  noiseSource.frequency.linearRampToValueAtTime(targetFreq, audioCtx.currentTime + frameDelta);
+
+  const speedFactor = Math.min(currentSpeed * 10, 1);
+  const targetGain  = muted ? 0 : speedFactor * (1 - currentAlpha) * 0.3;
+  noiseGain.gain.cancelAndHoldAtTime(audioCtx.currentTime);
+  noiseGain.gain.linearRampToValueAtTime(targetGain, audioCtx.currentTime + frameDelta);
 }
