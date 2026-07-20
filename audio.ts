@@ -7,8 +7,16 @@ const noiseGain: GainNode = audioContext.createGain();
 noiseGain.gain.value = 0;
 noiseGain.connect(audioContext.destination);
 
+let drumBuffer: AudioBuffer | null = null;
+
 export async function initNoise(): Promise<void> {
-  const response = await fetch('./noise.mp3');
+  const [noiseResponse, drumResponse] = await Promise.all([
+    fetch('./noise.mp3'),
+    fetch('./drumHit.mp3'),
+  ]);
+  drumBuffer = await audioContext.decodeAudioData(await drumResponse.arrayBuffer());
+
+  const response = noiseResponse;
   const noiseBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
 
   const noiseSource: AudioBufferSourceNode = audioContext.createBufferSource();
@@ -26,6 +34,11 @@ export function setMuted(v: boolean): void { muted = v; }
 
 export function onBeat(): void {
   if (audioContext.state === 'suspended') audioContext.resume();
+  if (!drumBuffer) return;
+  const source: AudioBufferSourceNode = audioContext.createBufferSource();
+  source.buffer = drumBuffer;
+  source.connect(audioContext.destination);
+  source.start();
 }
 
 export function tick(_now: number): void {

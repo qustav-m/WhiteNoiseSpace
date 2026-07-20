@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { TeapotGeometry } from 'three/examples/jsm/geometries/TeapotGeometry.js';
 import { calculateViewer, setUpDefault } from './viewer';
 import { buildMesh } from './geometry';
-import { update, setMode } from './animation';
+import { update, setMode, setBPM } from './animation';
 import { setMuted, tick as audioTick, initNoise } from './audio';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
@@ -79,6 +79,12 @@ async function init(): Promise<void> {
   window.addEventListener('resize', () => {
     threeRenderer.setSize(window.innerWidth, window.innerHeight);
     setResolution(resScale);
+  });
+
+  document.getElementById('slider-bpm')!.addEventListener('input', (e: Event) => {
+    const bpm = parseInt((e.target as HTMLInputElement).value);
+    document.getElementById('bpm-label')!.textContent = String(bpm);
+    setBPM(bpm);
   });
 
   document.getElementById('slider-res')!.addEventListener('input', (e: Event) => {

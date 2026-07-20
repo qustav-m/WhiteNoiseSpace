@@ -3,8 +3,12 @@ import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected }
 import { onBeat as audioOnBeat } from './audio';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-export const BPM: number = 30;
-export const beatInterval: number = 60000 / BPM; // ms
+export let BPM: number = 30;
+export let beatInterval: number = 60000 / BPM; // ms
+export function setBPM(bpm: number): void {
+  BPM = bpm;
+  beatInterval = 60000 / bpm;
+}
 
 const fadeEnd: number = 0.5;
 const rotationScale: number = 0.15; // radians per cm of head delta
