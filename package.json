@@ -3,10 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "npx http-server -p 3000 -c-1"
+    "start": "vite",
+    "build": "vite build"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.21",
     "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5"
   }
 }

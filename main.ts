@@ -1,24 +1,30 @@
-import { FaceLandmarker, FilesetResolver } from './node_modules/@mediapipe/tasks-vision/vision_bundle.mjs';
-import * as THREE from './node_modules/three/build/three.module.js';
-import { TeapotGeometry } from './node_modules/three/examples/jsm/geometries/TeapotGeometry.js';
-import { calculateViewer, setUpDefault } from './viewer.js';
-import { buildMesh } from './geometry.js';
-import { update, setMode } from './animation.js';
-import { setMuted, tick as audioTick } from './audio.js';
+import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import * as THREE from 'three';
+import { TeapotGeometry } from 'three/examples/jsm/geometries/TeapotGeometry.js';
+import { calculateViewer, setUpDefault } from './viewer';
+import { buildMesh } from './geometry';
+import { update, setMode } from './animation';
+import { setMuted, tick as audioTick } from './audio';
 
-const WASM_PATH  = './node_modules/@mediapipe/tasks-vision/wasm';
-const MODEL_PATH = './models/face_landmarker.task';
+const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
+const MODEL_PATH: string = './models/face_landmarker.task';
 
-let status, video, landmarker;
-let threeRenderer, threeScene, threeCamera;
-let sceneMesh;
-let renderTarget, blitScene, blitCamera;
-let resScale = 1.0;
+let status!: HTMLElement;
+let video!: HTMLVideoElement;
+let landmarker!: FaceLandmarker;
+let threeRenderer!: THREE.WebGLRenderer;
+let threeScene!: THREE.Scene;
+let threeCamera!: THREE.PerspectiveCamera;
+let sceneMesh!: THREE.Mesh;
+let renderTarget: THREE.WebGLRenderTarget | undefined;
+let blitScene!: THREE.Scene;
+let blitCamera!: THREE.OrthographicCamera;
+let resScale: number = 1.0;
 
-function loop() {
+function loop(): void {
   requestAnimationFrame(loop);
 
-  const now    = Date.now();
+  const now = Date.now();
   const result = landmarker.detectForVideo(video, now);
   calculateViewer(result);
   update(threeCamera, sceneMesh, now);
@@ -26,35 +32,35 @@ function loop() {
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';
-  status.style.color  = tracked ? '' : '#f44';
+  status.style.color = tracked ? '' : '#f44';
 
-  threeRenderer.setRenderTarget(renderTarget);
+  threeRenderer.setRenderTarget(renderTarget ?? null);
   threeRenderer.render(threeScene, threeCamera);
   threeRenderer.setRenderTarget(null);
   threeRenderer.render(blitScene, blitCamera);
 }
 
-async function init() {
-  status = document.getElementById('status');
-  video  = document.getElementById('webcam');
+async function init(): Promise<void> {
+  status = document.getElementById('status')!;
+  video = document.getElementById('webcam') as HTMLVideoElement;
 
-  const canvas  = document.getElementById('canvas');
-  threeScene    = new THREE.Scene();
+  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+  threeScene = new THREE.Scene();
   threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   threeRenderer.setSize(window.innerWidth, window.innerHeight);
 
   blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  blitScene  = new THREE.Scene();
+  blitScene = new THREE.Scene();
 
   threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
   threeCamera.position.set(0, 0, 0);
   threeCamera.up.set(0, 1, 0);
   threeCamera.lookAt(-1, 0, 0);
 
-  function setResolution(scale) {
-    const w = Math.max(1, Math.round(window.innerWidth  * scale));
-    const h = Math.max(1, Math.round(window.innerHeight * scale));
-    if (renderTarget) renderTarget.dispose();
+  function setResolution(scale: number): void {
+    const w: number = Math.max(1, Math.round(window.innerWidth * scale));
+    const h: number = Math.max(1, Math.round(window.innerHeight * scale));
+    renderTarget?.dispose();
     renderTarget = new THREE.WebGLRenderTarget(w, h, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
@@ -75,20 +81,21 @@ async function init() {
     setResolution(resScale);
   });
 
-  document.getElementById('slider-res').addEventListener('input', e => {
-    resScale = parseInt(e.target.value) / 100;
-    document.getElementById('res-label').textContent = e.target.value + '%';
+  document.getElementById('slider-res')!.addEventListener('input', (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    resScale = parseInt(input.value) / 100;
+    document.getElementById('res-label')!.textContent = input.value + '%';
     setResolution(resScale);
   });
 
-  const btnMode = document.getElementById('btn-mode');
+  const btnMode = document.getElementById('btn-mode') as HTMLButtonElement;
   btnMode.addEventListener('click', () => {
     const isDirect = btnMode.textContent === 'direct';
     setMode(isDirect ? 'direct' : 'continuous');
     btnMode.textContent = isDirect ? 'continuous' : 'direct';
   });
 
-  const btnMute = document.getElementById('btn-mute');
+  const btnMute = document.getElementById('btn-mute') as HTMLButtonElement;
   btnMute.addEventListener('click', () => {
     const m = btnMute.textContent === 'mute';
     setMuted(m);
@@ -98,7 +105,7 @@ async function init() {
   status.textContent = 'Requesting camera…';
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
   video.srcObject = stream;
-  await new Promise(r => video.addEventListener('loadeddata', r));
+  await new Promise<void>(r => video.addEventListener('loadeddata', () => r()));
 
   status.textContent = 'Loading face model…';
   const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
@@ -113,14 +120,14 @@ async function init() {
 
   const bgMaterial = new THREE.ShaderMaterial({
     depthWrite: false,
-    vertexShader:   `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
+    vertexShader: `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
     fragmentShader: `
       float rand(vec2 co) { return fract(sin(dot(co, vec2(127.1, 311.7))) * 43758.5453); }
       void main() { gl_FragColor = vec4(vec3(rand(floor(gl_FragCoord.xy))), 1.0); }
     `,
   });
   const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial);
-  bgMesh.renderOrder   = -1;
+  bgMesh.renderOrder = -1;
   bgMesh.frustumCulled = false;
   threeScene.add(bgMesh);
 
@@ -140,6 +147,6 @@ async function init() {
 }
 
 init().catch(err => {
-  document.getElementById('status').textContent = 'Error: ' + err.message;
+  document.getElementById('status')!.textContent = 'Error: ' + (err as Error).message;
   console.error(err);
 });
