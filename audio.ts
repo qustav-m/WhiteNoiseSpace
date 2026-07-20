@@ -10,6 +10,7 @@ noiseGain.connect(audioContext.destination);
 export async function initNoise(): Promise<void> {
   const response = await fetch('./noise.mp3');
   const noiseBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
+
   const noiseSource: AudioBufferSourceNode = audioContext.createBufferSource();
   noiseSource.buffer = noiseBuffer;
   noiseSource.loop = true;
@@ -30,7 +31,7 @@ export function onBeat(): void {
 export function tick(_now: number): void {
   const t: number = audioContext.currentTime;
   const speedFactor: number = Math.min(currentSpeed * 10, 1);
-  const targetGain: number = muted ? 0 : currentAlpha * speedFactor;
+  const targetGain: number = muted ? 0 : (1 - currentAlpha) * speedFactor;
   noiseGain.gain.cancelAndHoldAtTime(t);
   noiseGain.gain.setTargetAtTime(targetGain, t, 0.05);
 }

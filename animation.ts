@@ -3,7 +3,7 @@ import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected }
 import { onBeat as audioOnBeat } from './audio';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-export const BPM: number = 60;
+export const BPM: number = 30;
 export const beatInterval: number = 60000 / BPM; // ms
 
 const fadeEnd: number = 0.5;

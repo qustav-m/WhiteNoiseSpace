@@ -95,3 +95,5 @@ targetGain = speedFactor * (1 - currentAlpha) * 0.3
 Gain is ramped smoothly using `cancelAndHoldAtTime` + `linearRampToValueAtTime` to avoid stepped artifacts.
 
 `initNoise()` must be awaited during startup (called in `main.ts`) before the render loop starts.
+
+Signal chain: `noiseSource → noiseGain → destination`
