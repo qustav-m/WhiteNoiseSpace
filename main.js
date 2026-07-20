@@ -1,9 +1,10 @@
 import { FaceLandmarker, FilesetResolver } from './node_modules/@mediapipe/tasks-vision/vision_bundle.mjs';
 import * as THREE from './node_modules/three/build/three.module.js';
 import { TeapotGeometry } from './node_modules/three/examples/jsm/geometries/TeapotGeometry.js';
-import { calculateViewer, viewerForward, viewerUp, setUpDefault } from './viewer.js';
+import { calculateViewer, setUpDefault } from './viewer.js';
 import { buildMesh } from './geometry.js';
-import { moveDigitalCamera } from './animation.js';
+import { update } from './animation.js';
+import { setMuted } from './audio.js';
 
 const WASM_PATH  = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH = './models/face_landmarker.task';
@@ -17,20 +18,14 @@ let resScale = 1.0;
 function loop() {
   requestAnimationFrame(loop);
 
-  const result = landmarker.detectForVideo(video, Date.now());
+  const now    = Date.now();
+  const result = landmarker.detectForVideo(video, now);
   calculateViewer(result);
-  moveDigitalCamera(threeCamera);
+  update(threeCamera, sceneMesh, now);
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';
   status.style.color  = tracked ? '' : '#f44';
-
-  if (viewerForward.lengthSq() > 0) {
-    const forward = viewerForward.clone().normalize();
-    const up      = viewerUp.clone().normalize();
-    const right   = new THREE.Vector3().crossVectors(up, forward).normalize();
-    sceneMesh.setRotationFromMatrix(new THREE.Matrix4().makeBasis(right, up, forward));
-  }
 
   threeRenderer.setRenderTarget(renderTarget);
   threeRenderer.render(threeScene, threeCamera);
@@ -83,6 +78,13 @@ async function init() {
     resScale = parseInt(e.target.value) / 100;
     document.getElementById('res-label').textContent = e.target.value + '%';
     setResolution(resScale);
+  });
+
+  const btnMute = document.getElementById('btn-mute');
+  btnMute.addEventListener('click', () => {
+    const m = btnMute.textContent === 'mute';
+    setMuted(m);
+    btnMute.textContent = m ? 'unmute' : 'mute';
   });
 
   status.textContent = 'Requesting camera…';

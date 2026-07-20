@@ -28,9 +28,11 @@ export const viewerPosition = new Vector3();
 export const viewerForward  = new Vector3();
 export const viewerUp       = new Vector3();
 export let   viewerDistance = 0;
+export let   faceDetected   = false;
 
 export function calculateViewer(result) {
-  if (!result.facialTransformationMatrixes?.length) return;
+  faceDetected = !!result.facialTransformationMatrixes?.length;
+  if (!faceDetected) return;
 
   const m = new THREE.Matrix4().fromArray(result.facialTransformationMatrixes[0].data);
 

@@ -22,11 +22,12 @@ npm start              # serve at http://localhost:3000
 
 | File | Purpose |
 |---|---|
-| [index.html](index.html) | Canvas, hidden video, resolution slider UI |
+| [index.html](index.html) | Canvas, hidden video, resolution slider, mute button UI |
 | [main.js](main.js) | Init, render loop, Three.js scene setup |
 | [viewer.js](viewer.js) | Viewer tracking: `calculateViewer`, setup functions, viewer state |
 | [geometry.js](geometry.js) | `addTriangleAttribs`, `buildMesh` — shader geometry preprocessing |
-| [animation.js](animation.js) | Camera movement, beat-driven animation (in progress) |
+| [animation.js](animation.js) | Three animation modes, beat timing, camera + rotation update |
+| [audio.js](audio.js) | Beat-synced click sound, mute control |
 | [export-shader/vertex.glsl](export-shader/vertex.glsl) | Vertex shader — passes triangle attributes |
 | [export-shader/fragment.glsl](export-shader/fragment.glsl) | Anisotropic noise fragment shader |
 | [export-shader/setup.md](export-shader/setup.md) | Shader integration guide |
@@ -48,7 +49,7 @@ MediaPipe provides the face transform matrix in camera space. `calculateViewer` 
 - `setUpDefault()` — MacBook Pro 14" M3, webcam at top center of screen
 - `setUpHome()` — external monitor setup
 
-Exports: `viewerPosition`, `viewerForward`, `viewerUp`, `viewerDistance` (all live bindings).
+Exports: `viewerPosition`, `viewerForward`, `viewerUp`, `viewerDistance`, `faceDetected` (all live bindings).
 
 ### Shader (`export-shader/`)
 
@@ -64,6 +65,16 @@ Scene renders to a `WebGLRenderTarget` at scaled resolution (controlled by the r
 
 ### Animation (`animation.js`)
 
-`moveDigitalCamera(camera)` maps viewer distance (cm) to camera x-position (scene units) using `cmPerUnit = 10`. As the viewer moves closer, the camera moves away from the teapot, keeping apparent size roughly constant.
+Three modes, switched via `setMode(m)`:
 
-Beat-driven rotation system (planned): at each BPM beat, sample the head position delta since the last beat. `delta.z` (horizontal) drives yaw, `delta.y` (vertical) drives pitch. The impulse decays over the cycle via a swappable curve. Same target-stepping pattern used for camera distance.
+- **`direct`** — rotation and camera track viewer position every frame
+- **`beat`** — on each BPM beat, samples head delta since last beat → rotation impulse; slerps to target over the cycle via `progressCurve`
+- **`continuous`** — per-frame rotation weighted by `(1 - progressCurve)`: full effect at beat start, fades to zero by `fadeEnd`; camera X beat-lerped same as beat mode
+
+`progressCurve(t)` maps cycleT [0,1] → alpha [0,1]: ease-out quadratic, holds at 1 after `fadeEnd = 0.5`.
+
+Camera X maps viewer distance (cm) to scene units via `cmPerUnit = 10`, clamped to `[0, maxCamDist]`.
+
+`delta.z` (horizontal head movement) drives yaw; `delta.y` (vertical) drives pitch. Both applied in world space (left-multiply).
+
+`audioOnBeat()` from `audio.js` is called directly at each beat fire.
