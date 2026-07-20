@@ -3,8 +3,8 @@ import * as THREE from './node_modules/three/build/three.module.js';
 import { TeapotGeometry } from './node_modules/three/examples/jsm/geometries/TeapotGeometry.js';
 import { calculateViewer, setUpDefault } from './viewer.js';
 import { buildMesh } from './geometry.js';
-import { update } from './animation.js';
-import { setMuted } from './audio.js';
+import { update, setMode } from './animation.js';
+import { setMuted, tick as audioTick } from './audio.js';
 
 const WASM_PATH  = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH = './models/face_landmarker.task';
@@ -22,6 +22,7 @@ function loop() {
   const result = landmarker.detectForVideo(video, now);
   calculateViewer(result);
   update(threeCamera, sceneMesh, now);
+  audioTick();
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';
@@ -78,6 +79,13 @@ async function init() {
     resScale = parseInt(e.target.value) / 100;
     document.getElementById('res-label').textContent = e.target.value + '%';
     setResolution(resScale);
+  });
+
+  const btnMode = document.getElementById('btn-mode');
+  btnMode.addEventListener('click', () => {
+    const isDirect = btnMode.textContent === 'direct';
+    setMode(isDirect ? 'direct' : 'continuous');
+    btnMode.textContent = isDirect ? 'continuous' : 'direct';
   });
 
   const btnMute = document.getElementById('btn-mute');

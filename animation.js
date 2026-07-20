@@ -3,9 +3,10 @@ import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected }
 import { onBeat as audioOnBeat } from './audio.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-export const BPM          = 72;
+export const BPM          = 60;
 export const beatInterval = 60000 / BPM; // ms
-const fadeEnd       = 0.5;         // fraction of cycle where motion completes
+
+const fadeEnd       = 0.9;         // fraction of cycle where motion completes
 const rotationScale = 0.05;  // radians per cm of head delta
 const cmPerUnit     = 10.0;
 const maxCamDist    = 10.0;        // camera at x=0 when viewer is maxCamDist units away
@@ -13,6 +14,7 @@ const maxCamDist    = 10.0;        // camera at x=0 when viewer is maxCamDist un
 // ── Mode ──────────────────────────────────────────────────────────────────────
 let mode = 'continuous'; // 'direct' | 'beat' | 'continuous'
 export function setMode(m) { mode = m; }
+export let currentAlpha = 0;
 
 
 // ── Update (call once per frame) ──────────────────────────────────────────────
@@ -27,6 +29,7 @@ export function update(camera, mesh, now) {
 }
 
 function updateDirect(camera, mesh) {
+  currentAlpha = 1;
   camera.position.x = Math.max(0, maxCamDist - viewerDistance / cmPerUnit);
 
   if (viewerForward.lengthSq() > 0) {
@@ -109,6 +112,7 @@ function updateBeat(camera, mesh, now) {
 
   // progressCurve maps cycleT → alpha [0,1]: fast start, decelerates, holds at 1
   const alpha = progressCurve(Math.min(cycleT, 1.0));
+  currentAlpha = alpha;
   mesh.quaternion.slerpQuaternions(startRotation, targetRotation, alpha);
   camera.position.x = startCamX + (targetCamX - startCamX) * alpha;
 }
@@ -140,6 +144,7 @@ function updateContinuous(camera, mesh, now) {
   }
 
   const alpha = progressCurve(Math.min(cycleT, 1.0));
+  currentAlpha = alpha;
   camera.position.x = contStartCamX + (contTargetCamX - contStartCamX) * alpha;
 
   // weight: 1 at beat start → 0 at fadeEnd → 0 for rest of cycle
