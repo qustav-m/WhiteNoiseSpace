@@ -29,6 +29,6 @@ export function onBeat(): void {
 
 export function updateNoiseGain(_now: number): void {
   const speedFactor: number = Math.min(currentSpeed * 10, 1);
-  const targetGain: number = muted ? 0 : (1 - currentAlpha) * speedFactor;
+  const targetGain: number = muted ? 0 : currentAlpha * speedFactor;
   noisePlayer?.setGain(targetGain);
 }

@@ -12,6 +12,7 @@ export function setBPM(bpm: number): void {
 const fadeEnd: number = 0.5;
 const rotationScale: number = 0.15; // radians per cm of head delta
 const cmPerUnit: number = 10.0;
+const minCamDist: number = 0.0;
 const maxCamDist: number = 10.0;
 
 // ── Mode ──────────────────────────────────────────────────────────────────────
@@ -46,8 +47,8 @@ export function update(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: n
 }
 
 function updateDirect(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh): void {
-  currentAlpha = 1;
-  camera.position.x = Math.max(0, maxCamDist - viewerDistance / cmPerUnit);
+  currentAlpha = 0;
+  camera.position.x = THREE.MathUtils.clamp(maxCamDist - viewerDistance / cmPerUnit, minCamDist, maxCamDist);
 
   if (viewerForward.lengthSq() > 0) {
     const forward = viewerForward.clone().normalize();
@@ -58,7 +59,7 @@ function updateDirect(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh): void {
 }
 
 // ── Continuous ────────────────────────────────────────────────────────────────
-// Per-frame rotation weighted by (1 - progressCurve): full weight just after beat,
+// Per-frame rotation weighted by progressCurve: full weight just after beat,
 // zero weight at fadeEnd — movement during the rest phase has no effect.
 let contViewerPositionLastFrame: THREE.Vector3 | null = null;
 let contLastBeatTime: number = -1;
@@ -66,49 +67,39 @@ let contStartCamX: number = 0;
 let contTargetCamX: number = 0;
 
 
+// input: normalizedTime in [0, 1] (0 = beat start, 1 = beat end) → output: weight in [1, 0] (1 at beat start, 0 at fadeEnd)
 function progressCurve(normalizedTime: number): number {
-  if (normalizedTime >= fadeEnd) return 1.0;
+  if (normalizedTime >= fadeEnd) return 0.0;
   const progress: number = normalizedTime / fadeEnd;
-  return progress * progress; // ease-out quadratic
+  return 1 - progress * progress;
 }
-/*
-// swappable decay curve: maps cycleT [0,1] → alpha [0,1], fast start, holds at 1
-function progressCurve(normalizedTime: number): number {
-  if (normalizedTime >= fadeEnd) return 1.0;
-  const progress: number = normalizedTime / fadeEnd;
-  return 1 - (1 - progress) * (1 - progress); // ease-out quadratic
-}
-*/
 
 function updateContinuous(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
   if (contLastBeatTime < 0) {
     contLastBeatTime = now;
-    contTargetCamX = Math.max(0, maxCamDist - viewerDistance / cmPerUnit);
+    contTargetCamX = THREE.MathUtils.clamp(maxCamDist - viewerDistance / cmPerUnit, minCamDist, maxCamDist);
     contStartCamX = contTargetCamX;
   }
 
-  const cycleT: number = (now - contLastBeatTime) / beatInterval;
+  const cycleTimeFraction: number = (now - contLastBeatTime) / beatInterval;
 
-  if (cycleT >= 1) {
+  if (cycleTimeFraction >= 1) {
     contLastBeatTime = now;
     contStartCamX = camera.position.x;
-    contTargetCamX = Math.max(0, maxCamDist - viewerDistance / cmPerUnit);
+    contTargetCamX = THREE.MathUtils.clamp(maxCamDist - viewerDistance / cmPerUnit, minCamDist, maxCamDist);
     audioOnBeat();
   }
 
-  const alpha: number = progressCurve(Math.min(cycleT, 1.0));
+  const alpha: number = progressCurve(Math.min(cycleTimeFraction, 1.0));
   currentAlpha = alpha;
-  camera.position.x = contStartCamX + (contTargetCamX - contStartCamX) * alpha;
+  camera.position.x = contStartCamX + (contTargetCamX - contStartCamX) * (1 - alpha);
 
-  // weight: 1 at beat start → 0 at fadeEnd → 0 for rest of cycle
-  const weight: number = 1 - alpha;
-
-  if (faceDetected && contViewerPositionLastFrame !== null && weight > 0) {
+  if (faceDetected && contViewerPositionLastFrame !== null && alpha > 0) {
     const delta = viewerPosition.clone().sub(contViewerPositionLastFrame);
     const deltaQuat = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(0, -delta.z * rotationScale, delta.y * rotationScale, 'XYZ')
     );
-    mesh.quaternion.premultiply(new THREE.Quaternion().slerp(deltaQuat, weight));
+    mesh.quaternion.premultiply(new THREE.Quaternion().slerp(deltaQuat, alpha));
   }
 
   contViewerPositionLastFrame = faceDetected ? viewerPosition.clone() : null;
