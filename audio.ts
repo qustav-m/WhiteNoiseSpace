@@ -17,6 +17,7 @@ export async function initNoise(): Promise<void> {
   ]);
   noisePlayer.loop(4);
   noisePlayer.play();
+  drumPlayer.setGain(1);
 }
 
 export function setMuted(v: boolean): void { muted = v; }
