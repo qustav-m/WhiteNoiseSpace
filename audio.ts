@@ -27,7 +27,7 @@ export function onBeat(): void {
   drumPlayer.play();
 }
 
-export function tick(_now: number): void {
+export function updateNoiseGain(_now: number): void {
   const speedFactor: number = Math.min(currentSpeed * 10, 1);
   const targetGain: number = muted ? 0 : (1 - currentAlpha) * speedFactor;
   noisePlayer?.setGain(targetGain);

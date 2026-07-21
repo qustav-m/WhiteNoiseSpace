@@ -4,7 +4,7 @@ import { TeapotGeometry } from 'three/examples/jsm/geometries/TeapotGeometry.js'
 import { calculateViewer, setUpDefault } from './viewer';
 import { buildMesh } from './geometry';
 import { update, setMode, setBPM } from './animation';
-import { setMuted, tick as audioTick, initNoise } from './audio';
+import { setMuted, updateNoiseGain, initNoise } from './audio';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
@@ -28,7 +28,7 @@ function loop(): void {
   const result = landmarker.detectForVideo(video, now);
   calculateViewer(result);
   update(threeCamera, sceneMesh, now);
-  audioTick(now);
+  updateNoiseGain(now);
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';

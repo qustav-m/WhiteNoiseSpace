@@ -1,19 +1,19 @@
 export class AudioPlayer {
   private static readonly tickFrequency: number = 60;
 
-  private context: AudioContext;
-  private buffer: AudioBuffer;
-  private gainNode: GainNode;
-  private source: AudioBufferSourceNode | null = null;
+  private context: AudioContext; // shared browser audio engine
+  private buffer: AudioBuffer; // decoded audio file in memory
+  private gainNode: GainNode; // volume control node in the signal chain
+  private source: AudioBufferSourceNode | null = null; // currently playing source (null when stopped)
 
-  private gainValue: number = 0;
-  private intervalId: number = -1;
-  private loopEnabled: boolean = false;
-  private loopEnd: number = 0;
+  private gainValue: number = 0; // desired gain, set externally via setGain()
+  private intervalId: number = -1; // handle for the gain loop interval
+  private loopEnabled: boolean = false; // whether the track loops
+  private loopEnd: number = 0; // loop point in seconds
 
-  private startTime: number = 0;
-  private pauseOffset: number = 0;
-  private playing: boolean = false;
+  private startTime: number = 0; // context time when current playback started
+  private pauseOffset: number = 0; // playback position saved on stop(), used by resume()
+  private playing: boolean = false; // true while source is running
 
   static async load(context: AudioContext, url: string): Promise<AudioPlayer> {
     const buffer = await context.decodeAudioData(await (await fetch(url)).arrayBuffer());
