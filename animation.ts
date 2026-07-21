@@ -12,8 +12,8 @@ export function setBPM(bpm: number): void {
 const fadeEnd: number = 0.5;
 const rotationScale: number = 0.15; // radians per cm of head delta
 const cmPerUnit: number = 10.0;
-const minCamDist: number = 0.0;
-const maxCamDist: number = 10.0;
+const minCamDist: number = 0.0; // camera x in scene units (object is at x = -2)
+const maxCamDist: number = 10.0; // camera x in scene units (= 100cm from origin)
 
 // ── Mode ──────────────────────────────────────────────────────────────────────
 type Mode = 'direct' | 'continuous';
@@ -62,9 +62,8 @@ function updateDirect(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh): void {
 // Per-frame rotation weighted by progressCurve: full weight just after beat,
 // zero weight at fadeEnd — movement during the rest phase has no effect.
 let contViewerPositionLastFrame: THREE.Vector3 | null = null;
+let contViewerDistanceLastFrame: number | null = null;
 let contLastBeatTime: number = -1;
-let contStartCamX: number = 0;
-let contTargetCamX: number = 0;
 
 
 // input: normalizedTime in [0, 1] (0 = beat start, 1 = beat end) → output: weight in [1, 0] (1 at beat start, 0 at fadeEnd)
@@ -75,31 +74,36 @@ function progressCurve(normalizedTime: number): number {
 }
 
 function updateContinuous(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
-  if (contLastBeatTime < 0) {
-    contLastBeatTime = now;
-    contTargetCamX = THREE.MathUtils.clamp(maxCamDist - viewerDistance / cmPerUnit, minCamDist, maxCamDist);
-    contStartCamX = contTargetCamX;
-  }
+  if (contLastBeatTime < 0) contLastBeatTime = now;
 
   const cycleTimeFraction: number = (now - contLastBeatTime) / beatInterval;
 
   if (cycleTimeFraction >= 1) {
     contLastBeatTime = now;
-    contStartCamX = camera.position.x;
-    contTargetCamX = THREE.MathUtils.clamp(maxCamDist - viewerDistance / cmPerUnit, minCamDist, maxCamDist);
+    contViewerDistanceLastFrame = null;
     audioOnBeat();
   }
 
   const alpha: number = progressCurve(Math.min(cycleTimeFraction, 1.0));
   currentAlpha = alpha;
-  camera.position.x = contStartCamX + (contTargetCamX - contStartCamX) * (1 - alpha);
 
-  if (faceDetected && contViewerPositionLastFrame !== null && alpha > 0) {
-    const delta = viewerPosition.clone().sub(contViewerPositionLastFrame);
-    const deltaQuat = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(0, -delta.z * rotationScale, delta.y * rotationScale, 'XYZ')
-    );
-    mesh.quaternion.premultiply(new THREE.Quaternion().slerp(deltaQuat, alpha));
+  if (faceDetected && alpha > 0) {
+    if (contViewerDistanceLastFrame !== null) {
+      const deltaDistance: number = viewerDistance - contViewerDistanceLastFrame;
+      const newCameraX: number = camera.position.x - (deltaDistance / cmPerUnit) * alpha;
+      camera.position.x = THREE.MathUtils.clamp(newCameraX, minCamDist, maxCamDist);
+    }
+    contViewerDistanceLastFrame = viewerDistance;
+
+    if (contViewerPositionLastFrame !== null) {
+      const delta = viewerPosition.clone().sub(contViewerPositionLastFrame);
+      const deltaQuat = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(0, -delta.z * rotationScale, delta.y * rotationScale, 'XYZ')
+      );
+      mesh.quaternion.premultiply(new THREE.Quaternion().slerp(deltaQuat, alpha));
+    }
+  } else {
+    contViewerDistanceLastFrame = null;
   }
 
   contViewerPositionLastFrame = faceDetected ? viewerPosition.clone() : null;
