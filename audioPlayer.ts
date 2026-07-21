@@ -28,10 +28,17 @@ export class AudioPlayer {
     this.gainNode.gain.value = 0;
     this.gainNode.connect(context.destination);
 
+    this.startGainLoop();
+  }
+
+  private startGainLoop(): void {
     this.intervalId = setInterval(() => {
-      const t: number = this.context.currentTime;
-      this.gainNode.gain.cancelAndHoldAtTime(t);
-      this.gainNode.gain.setTargetAtTime(this.gainValue, t, 0.1);
+      const currentTime: number = this.context.currentTime;
+      this.gainNode.gain.cancelAndHoldAtTime(currentTime);
+      // exponentially approach gainValue starting at currentTime, with time constant 0.1s:
+      // after (1/60)s → 15% there, after 0.1s → 63%, after 0.2s → 86%, after 0.3s → 95%, never fully arrives
+      // gainValue fluctuates each frame; never arriving reduces variance — spikes and dips are pulled toward the mean
+      this.gainNode.gain.setTargetAtTime(this.gainValue, currentTime, 0.1);
     }, 1000 / AudioPlayer.tickFrequency);
   }
 
