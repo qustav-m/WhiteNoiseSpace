@@ -28,8 +28,8 @@ let speedLastTime: number = -1;
 export function update(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
   if (faceDetected) {
     if (speedLastPosition !== null && speedLastTime > 0) {
-      const dt: number = now - speedLastTime;
-      currentSpeed = dt > 0 ? viewerPosition.distanceTo(speedLastPosition) / dt : currentSpeed;
+      const deltaTime: number = now - speedLastTime;
+      currentSpeed = deltaTime > 0 ? viewerPosition.distanceTo(speedLastPosition) / deltaTime : currentSpeed;
     }
     speedLastPosition = viewerPosition.clone();
     speedLastTime = now;
@@ -60,23 +60,23 @@ function updateDirect(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh): void {
 // ── Continuous ────────────────────────────────────────────────────────────────
 // Per-frame rotation weighted by (1 - progressCurve): full weight just after beat,
 // zero weight at fadeEnd — movement during the rest phase has no effect.
-let contViewerPosLastFrame: THREE.Vector3 | null = null;
+let contViewerPositionLastFrame: THREE.Vector3 | null = null;
 let contLastBeatTime: number = -1;
 let contStartCamX: number = 0;
 let contTargetCamX: number = 0;
 
 
-function progressCurve(t: number): number {
-  if (t >= fadeEnd) return 1.0;
-  const s: number = t / fadeEnd;
-  return s * s; // ease-out quadratic
+function progressCurve(normalizedTime: number): number {
+  if (normalizedTime >= fadeEnd) return 1.0;
+  const progress: number = normalizedTime / fadeEnd;
+  return progress * progress; // ease-out quadratic
 }
 /*
 // swappable decay curve: maps cycleT [0,1] → alpha [0,1], fast start, holds at 1
-function progressCurve(t: number): number {
-  if (t >= fadeEnd) return 1.0;
-  const s: number = t / fadeEnd;
-  return 1 - (1 - s) * (1 - s); // ease-out quadratic
+function progressCurve(normalizedTime: number): number {
+  if (normalizedTime >= fadeEnd) return 1.0;
+  const progress: number = normalizedTime / fadeEnd;
+  return 1 - (1 - progress) * (1 - progress); // ease-out quadratic
 }
 */
 
@@ -103,13 +103,13 @@ function updateContinuous(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now
   // weight: 1 at beat start → 0 at fadeEnd → 0 for rest of cycle
   const weight: number = 1 - alpha;
 
-  if (faceDetected && contViewerPosLastFrame !== null && weight > 0) {
-    const delta = viewerPosition.clone().sub(contViewerPosLastFrame);
+  if (faceDetected && contViewerPositionLastFrame !== null && weight > 0) {
+    const delta = viewerPosition.clone().sub(contViewerPositionLastFrame);
     const deltaQuat = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(0, -delta.z * rotationScale, delta.y * rotationScale, 'XYZ')
     );
     mesh.quaternion.premultiply(new THREE.Quaternion().slerp(deltaQuat, weight));
   }
 
-  contViewerPosLastFrame = faceDetected ? viewerPosition.clone() : null;
+  contViewerPositionLastFrame = faceDetected ? viewerPosition.clone() : null;
 }

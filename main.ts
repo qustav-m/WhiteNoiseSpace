@@ -19,7 +19,7 @@ let sceneMesh!: THREE.Mesh;
 let renderTarget: THREE.WebGLRenderTarget | undefined;
 let blitScene!: THREE.Scene;
 let blitCamera!: THREE.OrthographicCamera;
-let resScale: number = 1.0;
+let resolutionScale: number = 1.0;
 
 function loop(): void {
   requestAnimationFrame(loop);
@@ -58,10 +58,10 @@ async function init(): Promise<void> {
   threeCamera.lookAt(-1, 0, 0);
 
   function setResolution(scale: number): void {
-    const w: number = Math.max(1, Math.round(window.innerWidth * scale));
-    const h: number = Math.max(1, Math.round(window.innerHeight * scale));
+    const width: number = Math.max(1, Math.round(window.innerWidth * scale));
+    const height: number = Math.max(1, Math.round(window.innerHeight * scale));
     renderTarget?.dispose();
-    renderTarget = new THREE.WebGLRenderTarget(w, h, {
+    renderTarget = new THREE.WebGLRenderTarget(width, height, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
     });
@@ -70,15 +70,15 @@ async function init(): Promise<void> {
       new THREE.PlaneGeometry(2, 2),
       new THREE.MeshBasicMaterial({ map: renderTarget.texture }),
     ));
-    threeCamera.aspect = w / h;
+    threeCamera.aspect = width / height;
     threeCamera.updateProjectionMatrix();
   }
 
-  setResolution(resScale);
+  setResolution(resolutionScale);
 
   window.addEventListener('resize', () => {
     threeRenderer.setSize(window.innerWidth, window.innerHeight);
-    setResolution(resScale);
+    setResolution(resolutionScale);
   });
 
   document.getElementById('slider-bpm')!.addEventListener('input', (e: Event) => {
@@ -89,29 +89,29 @@ async function init(): Promise<void> {
 
   document.getElementById('slider-res')!.addEventListener('input', (e: Event) => {
     const input = e.target as HTMLInputElement;
-    resScale = parseInt(input.value) / 100;
+    resolutionScale = parseInt(input.value) / 100;
     document.getElementById('res-label')!.textContent = input.value + '%';
-    setResolution(resScale);
+    setResolution(resolutionScale);
   });
 
-  const btnMode = document.getElementById('btn-mode') as HTMLButtonElement;
-  btnMode.addEventListener('click', () => {
-    const isDirect = btnMode.textContent === 'direct';
+  const modeButton = document.getElementById('btn-mode') as HTMLButtonElement;
+  modeButton.addEventListener('click', () => {
+    const isDirect = modeButton.textContent === 'direct';
     setMode(isDirect ? 'direct' : 'continuous');
-    btnMode.textContent = isDirect ? 'continuous' : 'direct';
+    modeButton.textContent = isDirect ? 'continuous' : 'direct';
   });
 
-  const btnMute = document.getElementById('btn-mute') as HTMLButtonElement;
-  btnMute.addEventListener('click', () => {
-    const muted = btnMute.textContent === 'mute';
+  const muteButton = document.getElementById('btn-mute') as HTMLButtonElement;
+  muteButton.addEventListener('click', () => {
+    const muted = muteButton.textContent === 'mute';
     setMuted(muted);
-    btnMute.textContent = muted ? 'unmute' : 'mute';
+    muteButton.textContent = muted ? 'unmute' : 'mute';
   });
 
   status.textContent = 'Requesting camera…';
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
   video.srcObject = stream;
-  await new Promise<void>(r => video.addEventListener('loadeddata', () => r()));
+  await new Promise<void>(resolve => video.addEventListener('loadeddata', () => resolve()));
 
   status.textContent = 'Loading face model…';
   const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
@@ -141,13 +141,13 @@ async function init(): Promise<void> {
   await initNoise();
 
   status.textContent = 'Loading shaders…';
-  const [vertSrc, fragSrc] = await Promise.all([
-    fetch('./export-shader/vertex.glsl').then(r => r.text()),
-    fetch('./export-shader/fragment.glsl').then(r => r.text()),
+  const [vertexSource, fragmentSource] = await Promise.all([
+    fetch('./export-shader/vertex.glsl').then(response => response.text()),
+    fetch('./export-shader/fragment.glsl').then(response => response.text()),
   ]);
 
   // Swap geometry here: new THREE.BoxGeometry(1,1,1), new TeapotGeometry(1), etc.
-  sceneMesh = buildMesh(vertSrc, fragSrc, new TeapotGeometry(0.65));
+  sceneMesh = buildMesh(vertexSource, fragmentSource, new TeapotGeometry(0.65));
   sceneMesh.position.set(-2, 0, 0);
   threeScene.add(sceneMesh);
 
