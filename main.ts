@@ -103,9 +103,9 @@ async function init(): Promise<void> {
 
   const btnMute = document.getElementById('btn-mute') as HTMLButtonElement;
   btnMute.addEventListener('click', () => {
-    const m = btnMute.textContent === 'unmute';
-    setMuted(m);
-    btnMute.textContent = m ? 'mute' : 'unmute';
+    const muted = btnMute.textContent === 'mute';
+    setMuted(muted);
+    btnMute.textContent = muted ? 'unmute' : 'mute';
   });
 
   status.textContent = 'Requesting camera…';
