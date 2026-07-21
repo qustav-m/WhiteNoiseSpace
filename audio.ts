@@ -29,12 +29,12 @@ export async function initNoise(): Promise<void> {
 }
 
 // ── Mute / beat ───────────────────────────────────────────────────────────────
-let muted: boolean = false;
+let muted: boolean = true;
 export function setMuted(v: boolean): void { muted = v; }
 
 export function onBeat(): void {
   if (audioContext.state === 'suspended') audioContext.resume();
-  if (!drumBuffer) return;
+  if (!drumBuffer || muted) return;
   const source: AudioBufferSourceNode = audioContext.createBufferSource();
   source.buffer = drumBuffer;
   source.connect(audioContext.destination);

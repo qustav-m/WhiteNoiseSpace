@@ -22,21 +22,21 @@ export function setMode(m: Mode): void { mode = m; }
 export let currentAlpha: number = 0;
 export let currentSpeed: number = 0; // cm/ms
 
-let speedLastPos: THREE.Vector3 | null = null;
+let speedLastPosition: THREE.Vector3 | null = null;
 let speedLastTime: number = -1;
 
 // ── Update (call once per frame) ──────────────────────────────────────────────
 export function update(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
   if (faceDetected) {
-    if (speedLastPos !== null && speedLastTime > 0) {
+    if (speedLastPosition !== null && speedLastTime > 0) {
       const dt: number = now - speedLastTime;
-      currentSpeed = dt > 0 ? viewerPosition.distanceTo(speedLastPos) / dt : currentSpeed;
+      currentSpeed = dt > 0 ? viewerPosition.distanceTo(speedLastPosition) / dt : currentSpeed;
     }
-    speedLastPos = viewerPosition.clone();
+    speedLastPosition = viewerPosition.clone();
     speedLastTime = now;
   } else {
     currentSpeed = 0;
-    speedLastPos = null;
+    speedLastPosition = null;
   }
 
   if (mode === 'direct') {
