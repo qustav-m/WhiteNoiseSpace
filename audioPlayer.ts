@@ -31,7 +31,7 @@ export class AudioPlayer {
     this.intervalId = setInterval(() => {
       const t: number = this.context.currentTime;
       this.gainNode.gain.cancelAndHoldAtTime(t);
-      this.gainNode.gain.setTargetAtTime(this.gainValue, t, 1 / AudioPlayer.tickFrequency);
+      this.gainNode.gain.setTargetAtTime(this.gainValue, t, 0.1);
     }, 1000 / AudioPlayer.tickFrequency);
   }
 
