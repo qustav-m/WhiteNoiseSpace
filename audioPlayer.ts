@@ -11,7 +11,7 @@ export class AudioPlayer {
   private loopEnabled: boolean = false; // whether the track loops
   private loopEnd: number = 0; // loop point in seconds
 
-  private startTime: number = 0; // context time when current playback started
+  private startTime: number = 0; // AudioContext time when current playback started
   private pauseOffset: number = 0; // playback position saved on stop(), used by resume()
   private playing: boolean = false; // true while source is running
 
