@@ -25,14 +25,14 @@ export class RevealedMode extends AnimationMode {
     return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, u, f));
   }
 
-  computeFrame(viewerState: ViewerState, _sceneState: SceneState, _now: number): FrameState {
+  computeFrame(viewerState: ViewerState, sceneState: SceneState, _now: number): FrameState {
     const cameraX: number = THREE.MathUtils.clamp(
       this.maxCameraX - viewerState.distance / this.cmPerUnit,
       this.minCameraX,
       this.maxCameraX
     );
 
-    let rotation: THREE.Quaternion = this.localOffset.clone();
+    let rotation: THREE.Quaternion = sceneState.rotation;
     if (viewerState.faceDetected && viewerState.forward.lengthSq() > 0) {
       rotation = this.faceQuaternion(viewerState.forward, viewerState.up).multiply(this.localOffset.clone());
     }
