@@ -15,10 +15,6 @@ export class HiddenMode extends AnimationMode {
   private viewerPositionLastFrame: THREE.Vector3 | null = null;
   private viewerDistanceLastFrame: number | null = null;
 
-  private speedLastPosition: THREE.Vector3 | null = null;
-  private speedLastTime: number = -1;
-  private currentSpeed: number = 0; // cm/ms
-
   setBPM(bpm: number): void {
     this.beatInterval = 60000 / bpm;
   }
@@ -31,20 +27,6 @@ export class HiddenMode extends AnimationMode {
   }
 
   computeFrame(viewerState: ViewerState, sceneState: SceneState, now: number): FrameState {
-    if (viewerState.faceDetected) {
-      if (this.speedLastPosition !== null && this.speedLastTime > 0) {
-        const deltaTime: number = now - this.speedLastTime;
-        if (deltaTime > 0) {
-          this.currentSpeed = viewerState.position.distanceTo(this.speedLastPosition) / deltaTime;
-        }
-      }
-      this.speedLastPosition = viewerState.position.clone();
-      this.speedLastTime = now;
-    } else {
-      this.currentSpeed = 0;
-      this.speedLastPosition = null;
-    }
-
     if (this.lastBeatTime < 0) this.lastBeatTime = now;
 
     const cycleTimeFraction: number = (now - this.lastBeatTime) / this.beatInterval;
@@ -79,8 +61,7 @@ export class HiddenMode extends AnimationMode {
 
     this.viewerPositionLastFrame = viewerState.faceDetected ? viewerState.position.clone() : null;
 
-    const speedFactor: number = Math.min(this.currentSpeed * 10, 1);
-    const noiseGain: number = alpha * speedFactor;
+    const noiseGain: number = alpha * viewerState.speedFactor;
 
     return { cameraX, rotation: sceneState.rotation, blendFactor: 0, noiseGain, fireBeat };
   }

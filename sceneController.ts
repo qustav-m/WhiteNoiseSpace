@@ -19,6 +19,9 @@ export class SceneController {
   private lastCameraX: number = 0;
   private lastRotation: THREE.Quaternion = new THREE.Quaternion();
   private currentBlendFactor: number = 0;
+  private speedLastPosition: THREE.Vector3 | null = null;
+  private speedLastTime: number = -1;
+  private currentSpeedFactor: number = 0;
 
   constructor() {
     this.hiddenMode = new HiddenMode();
@@ -40,11 +43,11 @@ export class SceneController {
   }
 
   startTransition(duration: number, now: number): void {
+    this.revealedMode.setBase(this.lastRotation, viewerForward.clone(), viewerUp.clone());
     this.currentMode = new TransitionMode(
       this.revealedMode,
       duration,
       now,
-      this.lastRotation,
       this.lastCameraX
     );
   }
@@ -58,12 +61,28 @@ export class SceneController {
   }
 
   update(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
+    if (faceDetected) {
+      if (this.speedLastPosition !== null && this.speedLastTime > 0) {
+        const deltaTime: number = now - this.speedLastTime;
+        if (deltaTime > 0) {
+          const speed = viewerPosition.distanceTo(this.speedLastPosition) / deltaTime;
+          this.currentSpeedFactor = Math.min(speed * 10, 1);
+        }
+      }
+      this.speedLastPosition = viewerPosition.clone();
+      this.speedLastTime = now;
+    } else {
+      this.currentSpeedFactor = 0;
+      this.speedLastPosition = null;
+    }
+
     const viewerState: ViewerState = {
       position: viewerPosition.clone(),
       forward: viewerForward.clone(),
       up: viewerUp.clone(),
       distance: viewerDistance,
       faceDetected: faceDetected,
+      speedFactor: this.currentSpeedFactor,
     };
 
     const sceneState: SceneState = {

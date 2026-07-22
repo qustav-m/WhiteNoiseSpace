@@ -6,6 +6,7 @@ export interface ViewerState {
   up: THREE.Vector3;
   distance: number;
   faceDetected: boolean;
+  speedFactor: number; // head movement speed clamped to [0, 1]
 }
 
 export interface SceneState {

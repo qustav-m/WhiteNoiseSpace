@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { AnimationMode } from './mode';
 import { RevealedMode } from './modeRevealed';
 import { ViewerState, SceneState, FrameState } from './frameState';
@@ -7,7 +6,6 @@ export class TransitionMode extends AnimationMode {
   private readonly revealedMode: RevealedMode;
   private readonly duration: number; // ms
   private readonly startTime: number;
-  private readonly startRotation: THREE.Quaternion;
   private readonly startCameraX: number;
   private readonly minCameraX: number = 0.0;
   private readonly maxCameraX: number = 10.0;
@@ -22,14 +20,12 @@ export class TransitionMode extends AnimationMode {
     revealedMode: RevealedMode,
     duration: number,
     now: number,
-    startRotation: THREE.Quaternion,
     startCameraX: number
   ) {
     super();
     this.revealedMode = revealedMode;
     this.duration = duration;
     this.startTime = now;
-    this.startRotation = startRotation.clone();
     this.startCameraX = startCameraX;
   }
 
@@ -60,8 +56,8 @@ export class TransitionMode extends AnimationMode {
       cameraX = directX;
     }
 
-    const rotation: THREE.Quaternion = this.startRotation.clone().slerp(revealedFrame.rotation, blendFactor);
-    const noiseGain: number = 1 - blendFactor;
+    const rotation = revealedFrame.rotation;
+    const noiseGain: number = viewerState.speedFactor * (1 - blendFactor);
 
     return { cameraX, rotation, blendFactor, noiseGain, fireBeat: false };
   }
