@@ -16,7 +16,6 @@ export class SceneController {
   private drumPlayer: AudioPlayer | null = null;
   private muted: boolean = true;
 
-  private lastCameraX: number = 0;
   private lastRotation: THREE.Quaternion = new THREE.Quaternion();
   private currentBlendFactor: number = 0;
   private speedLastPosition: THREE.Vector3 | null = null;
@@ -44,12 +43,7 @@ export class SceneController {
 
   startTransition(duration: number, now: number): void {
     this.revealedMode.setBase(this.lastRotation, viewerForward.clone(), viewerUp.clone());
-    this.currentMode = new TransitionMode(
-      this.revealedMode,
-      duration,
-      now,
-      this.lastCameraX
-    );
+    this.currentMode = new TransitionMode(this.revealedMode, duration, now);
   }
 
   setModeHidden(): void {
@@ -95,7 +89,7 @@ export class SceneController {
     camera.position.x = frame.cameraX;
     mesh.quaternion.copy(frame.rotation);
 
-    this.lastCameraX = frame.cameraX;
+
     this.lastRotation.copy(frame.rotation);
 
     if (frame.fireBeat && !this.muted && this.drumPlayer) {
