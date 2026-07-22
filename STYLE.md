@@ -5,6 +5,7 @@
 - **Self-explanatory names** — names must describe what they are or do. Well-named identifiers describe what the code does.
 - **No non-scientific abbreviations** — `BPM`, `RGB`, `FPS` are fine (established domain terms). `ctx`, `pos`, `btn`, `t` are not. Write the full word.
 - **camelCase** — `isNameShowingYouCasing`. No snake_case, no PascalCase for variables or functions.
+- **File hierarchy naming** — when files belong together and form a hierarchy, put the general part first: `modeHidden.ts`, not `hiddenMode.ts`. The more specific part is the suffix.
 
 ## Formatting
 
