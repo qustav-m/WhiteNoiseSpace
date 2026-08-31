@@ -17,7 +17,9 @@ export interface SceneState {
 export interface FrameState {
   cameraX: number;
   rotation: THREE.Quaternion;
-  blendFactor: number; // 0 = fully hidden (noise shader), 1 = fully revealed (PBR)
+  grayscalePbrNoiseBlend: number; // 0 = noise only, 1 = PBR HSV-value only
+  pbrColorBlend: number;          // 0 = PBR HSV-value, 1 = full color PBR
   noiseGain: number;
   fireBeat: boolean;
+  transition: 'startCompletionMode' | 'startNewRound' | null;
 }

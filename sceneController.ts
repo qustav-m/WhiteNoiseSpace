@@ -1,31 +1,54 @@
 import * as THREE from 'three';
-import { HiddenMode } from './modeHidden';
-import { RevealedMode } from './modeRevealed';
-import { TransitionMode } from './modeTransition';
+import { GamingMode } from './modeGaming';
+import { CompletionMode } from './modeCompletion';
 import { AnimationMode } from './mode';
 import { ViewerState, SceneState } from './frameState';
 import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected } from './viewer';
 import { AudioPlayer } from './audioPlayer';
 
+const startAngleMinDeg: number = 60;
+const startAngleMaxDeg: number = 120;
+
+function randomStartRotation(): THREE.Quaternion {
+  const minRad = THREE.MathUtils.degToRad(startAngleMinDeg);
+  const maxRad = THREE.MathUtils.degToRad(startAngleMaxDeg);
+  const angleFromUp: number = minRad + Math.random() * (maxRad - minRad);
+  const azimuth: number = Math.random() * Math.PI * 2;
+
+  const objectUp = new THREE.Vector3(
+    Math.sin(angleFromUp) * Math.cos(azimuth),
+    Math.cos(angleFromUp),
+    Math.sin(angleFromUp) * Math.sin(azimuth),
+  );
+
+  const baseRotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), objectUp);
+  const roll = new THREE.Quaternion().setFromAxisAngle(objectUp, Math.random() * Math.PI * 2);
+  return roll.multiply(baseRotation);
+}
+
 export class SceneController {
-  private readonly hiddenMode: HiddenMode;
-  private readonly revealedMode: RevealedMode;
-  private currentMode: AnimationMode;
+  private currentMode!: AnimationMode;
+  private currentBPM: number = 30;
 
   private noisePlayer: AudioPlayer | null = null;
   private drumPlayer: AudioPlayer | null = null;
   private muted: boolean = true;
 
-  private lastRotation: THREE.Quaternion = new THREE.Quaternion();
-  private currentBlendFactor: number = 0;
+  private pendingRotation: THREE.Quaternion | null = null;
+  private currentGrayscalePbrNoiseBlend: number = 0;
+  private currentPbrColorBlend: number = 0;
   private speedLastPosition: THREE.Vector3 | null = null;
   private speedLastTime: number = -1;
   private currentSpeedFactor: number = 0;
 
   constructor() {
-    this.hiddenMode = new HiddenMode();
-    this.revealedMode = new RevealedMode();
-    this.currentMode = this.hiddenMode;
+    this.startNewRound();
+  }
+
+  private createGamingMode(): GamingMode {
+    const mode = new GamingMode();
+    mode.setBPM(this.currentBPM);
+    return mode;
   }
 
   setAudioPlayers(noisePlayer: AudioPlayer, drumPlayer: AudioPlayer): void {
@@ -38,23 +61,31 @@ export class SceneController {
   }
 
   setBPM(bpm: number): void {
-    this.hiddenMode.setBPM(bpm);
+    this.currentBPM = bpm;
+    if (this.currentMode instanceof GamingMode) {
+      this.currentMode.setBPM(bpm);
+    }
   }
 
-  startTransition(duration: number, now: number): void {
-    this.revealedMode.setBase(this.lastRotation, viewerForward.clone(), viewerUp.clone());
-    this.currentMode = new TransitionMode(this.revealedMode, duration, now);
+  startNewRound(): void {
+    this.pendingRotation = randomStartRotation();
+    this.currentMode = this.createGamingMode();
   }
 
-  setModeHidden(): void {
-    this.currentMode = this.hiddenMode;
+  get grayscalePbrNoiseBlend(): number {
+    return this.currentGrayscalePbrNoiseBlend;
   }
 
-  get blendFactor(): number {
-    return this.currentBlendFactor;
+  get pbrColorBlend(): number {
+    return this.currentPbrColorBlend;
   }
 
   update(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
+    if (this.pendingRotation !== null) {
+      mesh.quaternion.copy(this.pendingRotation);
+      this.pendingRotation = null;
+    }
+
     if (faceDetected) {
       if (this.speedLastPosition !== null && this.speedLastTime > 0) {
         const deltaTime: number = now - this.speedLastTime;
@@ -89,8 +120,11 @@ export class SceneController {
     camera.position.x = frame.cameraX;
     mesh.quaternion.copy(frame.rotation);
 
-
-    this.lastRotation.copy(frame.rotation);
+    if (frame.transition === 'startCompletionMode') {
+      this.currentMode = new CompletionMode(frame.rotation, frame.cameraX, now);
+    } else if (frame.transition === 'startNewRound') {
+      this.startNewRound();
+    }
 
     if (frame.fireBeat && !this.muted && this.drumPlayer) {
       this.drumPlayer.play();
@@ -99,6 +133,7 @@ export class SceneController {
       this.noisePlayer.setGain(this.muted ? 0 : frame.noiseGain);
     }
 
-    this.currentBlendFactor = frame.blendFactor;
+    this.currentGrayscalePbrNoiseBlend = frame.grayscalePbrNoiseBlend;
+    this.currentPbrColorBlend = frame.pbrColorBlend;
   }
 }

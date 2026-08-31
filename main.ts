@@ -14,16 +14,15 @@ let video!: HTMLVideoElement;
 let landmarker!: FaceLandmarker;
 let threeRenderer!: THREE.WebGLRenderer;
 let threeScene!: THREE.Scene;
-let normalScene!: THREE.Scene;
+let pbrScene!: THREE.Scene;
 let threeCamera!: THREE.PerspectiveCamera;
 let sceneMesh!: THREE.Mesh;
-let normalMesh!: THREE.Mesh;
+let pbrMesh!: THREE.Mesh;
 let noiseRenderTarget: THREE.WebGLRenderTarget | undefined;
-let normalRenderTarget: THREE.WebGLRenderTarget | undefined;
+let pbrRenderTarget: THREE.WebGLRenderTarget | undefined;
 let blitScene!: THREE.Scene;
 let blitCamera!: THREE.OrthographicCamera;
-let noiseBlitMaterial!: THREE.MeshBasicMaterial;
-let normalsBlitMaterial!: THREE.MeshBasicMaterial;
+let blitMaterial!: THREE.ShaderMaterial;
 let resolutionScale: number = 1.0;
 let sceneController!: SceneController;
 
@@ -35,8 +34,9 @@ function loop(): void {
   calculateViewer(result);
   sceneController.update(threeCamera, sceneMesh, now);
 
-  normalMesh.quaternion.copy(sceneMesh.quaternion);
-  normalsBlitMaterial.opacity = sceneController.blendFactor;
+  pbrMesh.quaternion.copy(sceneMesh.quaternion);
+  blitMaterial.uniforms.grayscalePbrNoiseBlend.value = sceneController.grayscalePbrNoiseBlend;
+  blitMaterial.uniforms.pbrColorBlend.value = sceneController.pbrColorBlend;
 
   const tracked = result.facialTransformationMatrixes?.length;
   status.textContent = tracked ? '' : 'no face detected';
@@ -45,8 +45,8 @@ function loop(): void {
   threeRenderer.setRenderTarget(noiseRenderTarget ?? null);
   threeRenderer.render(threeScene, threeCamera);
 
-  threeRenderer.setRenderTarget(normalRenderTarget ?? null);
-  threeRenderer.render(normalScene, threeCamera);
+  threeRenderer.setRenderTarget(pbrRenderTarget ?? null);
+  threeRenderer.render(pbrScene, threeCamera);
 
   threeRenderer.setRenderTarget(null);
   threeRenderer.render(blitScene, blitCamera);
@@ -58,20 +58,48 @@ async function init(): Promise<void> {
 
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
   threeScene = new THREE.Scene();
-  normalScene = new THREE.Scene();
-  normalScene.background = new THREE.Color(0x000000);
+  pbrScene = new THREE.Scene();
+  pbrScene.background = new THREE.Color(0x000000);
   threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   threeRenderer.setSize(window.innerWidth, window.innerHeight);
 
   blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   blitScene = new THREE.Scene();
 
-  noiseBlitMaterial = new THREE.MeshBasicMaterial();
-  normalsBlitMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+  blitMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      noiseTexture: { value: null },
+      pbrTexture: { value: null },
+      grayscalePbrNoiseBlend: { value: 0 },
+      pbrColorBlend: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D noiseTexture;
+      uniform sampler2D pbrTexture;
+      uniform float grayscalePbrNoiseBlend;
+      uniform float pbrColorBlend;
+      varying vec2 vUv;
+      void main() {
+        vec3 noise = texture2D(noiseTexture, vUv).rgb;
+        vec3 pbr = texture2D(pbrTexture, vUv).rgb;
+        float pbrHsvValue = max(pbr.r, max(pbr.g, pbr.b));
+        vec3 grayscalePbrNoiseMix = mix(noise, vec3(pbrHsvValue), grayscalePbrNoiseBlend);
+        vec3 finalColor = mix(grayscalePbrNoiseMix, pbr, pbrColorBlend);
+        gl_FragColor = vec4(finalColor, 1.0);
+        #include <colorspace_fragment>
+      }
+    `,
+  });
 
   const blitPlane = new THREE.PlaneGeometry(2, 2);
-  blitScene.add(new THREE.Mesh(blitPlane, noiseBlitMaterial));
-  blitScene.add(new THREE.Mesh(blitPlane, normalsBlitMaterial));
+  blitScene.add(new THREE.Mesh(blitPlane, blitMaterial));
 
   threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
   threeCamera.position.set(0, 0, 0);
@@ -83,16 +111,14 @@ async function init(): Promise<void> {
     const height: number = Math.max(1, Math.round(window.innerHeight * scale));
 
     noiseRenderTarget?.dispose();
-    normalRenderTarget?.dispose();
+    pbrRenderTarget?.dispose();
 
     const targetOptions = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter };
     noiseRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
-    normalRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
+    pbrRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
 
-    noiseBlitMaterial.map = noiseRenderTarget.texture;
-    noiseBlitMaterial.needsUpdate = true;
-    normalsBlitMaterial.map = normalRenderTarget.texture;
-    normalsBlitMaterial.needsUpdate = true;
+    blitMaterial.uniforms.noiseTexture.value = noiseRenderTarget.texture;
+    blitMaterial.uniforms.pbrTexture.value = pbrRenderTarget.texture;
 
     threeCamera.aspect = width / height;
     threeCamera.updateProjectionMatrix();
@@ -118,23 +144,17 @@ async function init(): Promise<void> {
     setResolution(resolutionScale);
   });
 
-  const modeButton = document.getElementById('btn-mode') as HTMLButtonElement;
-  modeButton.addEventListener('click', () => {
-    const now = Date.now();
-    if (modeButton.textContent === 'reveal') {
-      sceneController.startTransition(2000, now);
-      modeButton.textContent = 'hide';
-    } else {
-      sceneController.setModeHidden();
-      modeButton.textContent = 'reveal';
-    }
-  });
-
   const muteButton = document.getElementById('btn-mute') as HTMLButtonElement;
   muteButton.addEventListener('click', () => {
-    const muted = muteButton.textContent === 'mute';
+    const muted = muteButton.textContent !== 'unmute';
     sceneController.setMuted(muted);
     muteButton.textContent = muted ? 'unmute' : 'mute';
+  });
+
+  const modeButton = document.getElementById('btn-mode') as HTMLButtonElement;
+  modeButton.textContent = 'restart';
+  modeButton.addEventListener('click', () => {
+    sceneController.startNewRound();
   });
 
   status.textContent = 'Requesting camera…';
@@ -177,15 +197,14 @@ async function init(): Promise<void> {
     fetch('./export-shader/fragment.glsl').then(response => response.text()),
   ]);
 
-  // Swap geometry here: new THREE.BoxGeometry(1,1,1), new TeapotGeometry(1), etc.
   const geometry = new TeapotGeometry(0.65);
   sceneMesh = buildMesh(vertexSource, fragmentSource, geometry);
   sceneMesh.position.set(-2, 0, 0);
   threeScene.add(sceneMesh);
 
-  normalMesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
-  normalMesh.position.set(-2, 0, 0);
-  normalScene.add(normalMesh);
+  pbrMesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
+  pbrMesh.position.set(-2, 0, 0);
+  pbrScene.add(pbrMesh);
 
   status.textContent = 'Running';
   requestAnimationFrame(loop);
