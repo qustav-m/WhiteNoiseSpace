@@ -55,18 +55,19 @@ export class CompletionMode extends AnimationMode {
     this.lastFrameRotation = rotation.clone();
     this.lastFrameTime = now;
 
-    const transition = timeSinceStart >= this.activeDuration + this.holdDuration
-      ? 'startNewRound' as const
+    const modeChange = timeSinceStart >= this.activeDuration + this.holdDuration
+      ? 'startTransitionMode' as const
       : null;
 
     return {
       cameraX,
       rotation,
-      grayscalePbrNoiseBlend: 1,
       pbrColorBlend: curve,
+      captureBlend: 0,
+      grayscalePbrNoiseBlend: 1,
       noiseGain,
       fireBeat: false,
-      transition,
+      modeChange,
     };
   }
 }

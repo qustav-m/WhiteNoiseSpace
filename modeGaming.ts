@@ -81,13 +81,13 @@ export class GamingMode extends AnimationMode {
     return { rotation: sceneState.rotation, cameraX };
   }
 
-  private blendStateFromRotation(rotation: THREE.Quaternion): { grayscalePbrNoiseBlend: number; transition: 'startCompletionMode' | null } {
+  private blendStateFromRotation(rotation: THREE.Quaternion): { grayscalePbrNoiseBlend: number; modeChange: 'startCompletionMode' | null } {
     const worldUp = new THREE.Vector3(0, 1, 0);
     const objectUp = worldUp.clone().applyQuaternion(rotation);
     const angleDeg: number = THREE.MathUtils.RAD2DEG * Math.acos(THREE.MathUtils.clamp(objectUp.dot(worldUp), -1, 1));
     return {
       grayscalePbrNoiseBlend: GamingMode.blendFromAngle(angleDeg),
-      transition: angleDeg < GamingMode.completionThresholdDeg ? 'startCompletionMode' : null,
+      modeChange: angleDeg < GamingMode.completionThresholdDeg ? 'startCompletionMode' : null,
     };
   }
 
@@ -95,15 +95,16 @@ export class GamingMode extends AnimationMode {
     const { fireBeat, alpha } = this.beatCalculations(now);
     const { positionDelta, distanceDelta } = this.updateViewerAndSampleDeltas(viewerState);
     const { rotation, cameraX } = this.transformScene(positionDelta, distanceDelta, sceneState, alpha);
-    const { grayscalePbrNoiseBlend, transition } = this.blendStateFromRotation(rotation);
+    const { grayscalePbrNoiseBlend, modeChange } = this.blendStateFromRotation(rotation);
     return {
       cameraX,
       rotation,
-      grayscalePbrNoiseBlend,
       pbrColorBlend: 0,
+      captureBlend: 0,
+      grayscalePbrNoiseBlend,
       noiseGain: alpha * viewerState.speedFactor,
       fireBeat,
-      transition,
+      modeChange,
     };
   }
 }

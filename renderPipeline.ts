@@ -1,0 +1,154 @@
+import * as THREE from 'three';
+import { buildMesh } from './geometry';
+
+export class RenderPipeline {
+  readonly camera: THREE.PerspectiveCamera;
+  readonly sceneMesh: THREE.Mesh;
+
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly noiseScene: THREE.Scene;
+  private readonly pbrScene: THREE.Scene;
+  private readonly pbrMesh: THREE.Mesh;
+  private readonly blitScene: THREE.Scene;
+  private readonly blitCamera: THREE.OrthographicCamera;
+  private readonly blitMaterial: THREE.ShaderMaterial;
+
+  private noiseRenderTarget: THREE.WebGLRenderTarget | undefined;
+  private pbrRenderTarget: THREE.WebGLRenderTarget | undefined;
+  private pbrCaptureTarget: THREE.WebGLRenderTarget | undefined;
+
+  constructor(
+    canvas: HTMLCanvasElement,
+    vertexSource: string,
+    fragmentSource: string,
+    geometry: THREE.BufferGeometry,
+  ) {
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+    this.camera.position.set(0, 0, 0);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(-1, 0, 0);
+
+    this.noiseScene = new THREE.Scene();
+    const bgMaterial = new THREE.ShaderMaterial({
+      depthWrite: false,
+      vertexShader: `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
+      fragmentShader: `
+        float rand(vec2 co) { return fract(sin(dot(co, vec2(127.1, 311.7))) * 43758.5453); }
+        void main() { gl_FragColor = vec4(vec3(rand(floor(gl_FragCoord.xy))), 1.0); }
+      `,
+    });
+    const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial);
+    bgMesh.renderOrder = -1;
+    bgMesh.frustumCulled = false;
+    this.noiseScene.add(bgMesh);
+    this.sceneMesh = buildMesh(vertexSource, fragmentSource, geometry);
+    this.sceneMesh.position.set(-2, 0, 0);
+    this.noiseScene.add(this.sceneMesh);
+
+    this.pbrScene = new THREE.Scene();
+    this.pbrScene.background = new THREE.Color(0x000000);
+    this.pbrMesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
+    this.pbrMesh.position.set(-2, 0, 0);
+    this.pbrScene.add(this.pbrMesh);
+
+    this.blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.blitScene = new THREE.Scene();
+    this.blitMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        noiseTexture:            { value: null },
+        pbrTexture:              { value: null },
+        captureTexture:          { value: null },
+        pbrColorBlend:           { value: 0 },
+        captureBlend:            { value: 0 },
+        grayscalePbrNoiseBlend:  { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D noiseTexture;
+        uniform sampler2D pbrTexture;
+        uniform sampler2D captureTexture;
+        uniform float pbrColorBlend;
+        uniform float captureBlend;
+        uniform float grayscalePbrNoiseBlend;
+        varying vec2 vUv;
+        void main() {
+          vec3 noise = texture2D(noiseTexture, vUv).rgb;
+          vec3 pbr = texture2D(pbrTexture, vUv).rgb;
+          vec3 capture = texture2D(captureTexture, vUv).rgb;
+          float pbrValue = max(pbr.r, max(pbr.g, pbr.b));
+          vec3 pbrWithColor = mix(vec3(pbrValue), pbr, pbrColorBlend);
+          vec3 pbrOrCapture = mix(pbrWithColor, capture, captureBlend);
+          vec3 finalColor = mix(noise, pbrOrCapture, grayscalePbrNoiseBlend);
+          gl_FragColor = vec4(finalColor, 1.0);
+          #include <colorspace_fragment>
+        }
+      `,
+    });
+    this.blitScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.blitMaterial));
+  }
+
+  setResolution(scale: number): void {
+    const width: number = Math.max(1, Math.round(window.innerWidth * scale));
+    const height: number = Math.max(1, Math.round(window.innerHeight * scale));
+
+    this.noiseRenderTarget?.dispose();
+    this.pbrRenderTarget?.dispose();
+    this.pbrCaptureTarget?.dispose();
+
+    const targetOptions = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter };
+    this.noiseRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
+    this.pbrRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
+    this.pbrCaptureTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
+
+    this.blitMaterial.uniforms.noiseTexture.value = this.noiseRenderTarget.texture;
+    this.blitMaterial.uniforms.captureTexture.value = this.pbrCaptureTarget.texture;
+
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+  }
+
+  handleResize(resolutionScale: number): void {
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.setResolution(resolutionScale);
+  }
+
+  takeCapture(): void {
+    if (!this.pbrCaptureTarget) return;
+    const savedCapture = this.blitMaterial.uniforms.captureTexture.value;
+    this.blitMaterial.uniforms.captureTexture.value = null;
+    this.renderer.setRenderTarget(this.pbrCaptureTarget);
+    this.renderer.render(this.blitScene, this.blitCamera);
+    this.renderer.setRenderTarget(null);
+    this.blitMaterial.uniforms.captureTexture.value = savedCapture;
+  }
+
+  setBlends(grayscalePbrNoiseBlend: number, pbrColorBlend: number, captureBlend: number): void {
+    this.blitMaterial.uniforms.grayscalePbrNoiseBlend.value = grayscalePbrNoiseBlend;
+    this.blitMaterial.uniforms.pbrColorBlend.value = pbrColorBlend;
+    this.blitMaterial.uniforms.captureBlend.value = captureBlend;
+  }
+
+  render(): void {
+    this.pbrMesh.quaternion.copy(this.sceneMesh.quaternion);
+
+    this.renderer.setRenderTarget(this.pbrRenderTarget ?? null);
+    this.renderer.render(this.pbrScene, this.camera);
+
+    this.renderer.setRenderTarget(this.noiseRenderTarget ?? null);
+    this.renderer.render(this.noiseScene, this.camera);
+
+    this.blitMaterial.uniforms.pbrTexture.value = this.pbrRenderTarget?.texture;
+
+    this.renderer.setRenderTarget(null);
+    this.renderer.render(this.blitScene, this.blitCamera);
+  }
+}

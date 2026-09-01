@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { GamingMode } from './modeGaming';
 import { CompletionMode } from './modeCompletion';
+import { TransitionMode } from './modeTransition';
 import { AnimationMode } from './mode';
 import { ViewerState, SceneState } from './frameState';
 import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected } from './viewer';
 import { AudioPlayer } from './audioPlayer';
+import { RenderPipeline } from './renderPipeline';
 
 const startAngleMinDeg: number = 60;
 const startAngleMaxDeg: number = 120;
@@ -26,7 +28,8 @@ function randomStartRotation(): THREE.Quaternion {
   return roll.multiply(baseRotation);
 }
 
-export class SceneController {
+export class ModeController {
+  private renderPipeline!: RenderPipeline;
   private currentMode!: AnimationMode;
   private currentBPM: number = 30;
 
@@ -34,15 +37,20 @@ export class SceneController {
   private drumPlayer: AudioPlayer | null = null;
   private muted: boolean = true;
 
-  private pendingRotation: THREE.Quaternion | null = null;
-  private currentGrayscalePbrNoiseBlend: number = 0;
-  private currentPbrColorBlend: number = 0;
   private speedLastPosition: THREE.Vector3 | null = null;
   private speedLastTime: number = -1;
   private currentSpeedFactor: number = 0;
 
-  constructor() {
-    this.startNewRound();
+  initialize(renderPipeline: RenderPipeline): void {
+    this.renderPipeline = renderPipeline;
+    this.switchToNextScene(renderPipeline.sceneMesh);
+    this.currentMode = this.createGamingMode();
+  }
+
+  private switchToNextScene(mesh: THREE.Mesh): void {
+    // TODO: swap to next glTF model and position it
+    const newRotation = randomStartRotation();
+    mesh.quaternion.copy(newRotation);
   }
 
   private createGamingMode(): GamingMode {
@@ -67,24 +75,9 @@ export class SceneController {
     }
   }
 
-  startNewRound(): void {
-    this.pendingRotation = randomStartRotation();
-    this.currentMode = this.createGamingMode();
-  }
-
-  get grayscalePbrNoiseBlend(): number {
-    return this.currentGrayscalePbrNoiseBlend;
-  }
-
-  get pbrColorBlend(): number {
-    return this.currentPbrColorBlend;
-  }
-
-  update(camera: THREE.PerspectiveCamera, mesh: THREE.Mesh, now: number): void {
-    if (this.pendingRotation !== null) {
-      mesh.quaternion.copy(this.pendingRotation);
-      this.pendingRotation = null;
-    }
+  update(now: number): void {
+    const camera = this.renderPipeline.camera;
+    const mesh = this.renderPipeline.sceneMesh;
 
     if (faceDetected) {
       if (this.speedLastPosition !== null && this.speedLastTime > 0) {
@@ -115,16 +108,21 @@ export class SceneController {
       rotation: mesh.quaternion.clone(),
     };
 
-    const frame = this.currentMode.computeFrame(viewerState, sceneState, now);
+    let frame = this.currentMode.computeFrame(viewerState, sceneState, now);
+
+    if (frame.modeChange === 'startCompletionMode') {
+      this.currentMode = new CompletionMode(frame.rotation, frame.cameraX, now);
+    } else if (frame.modeChange === 'startTransitionMode') {
+      this.renderPipeline.takeCapture();
+      this.switchToNextScene(mesh);
+      this.currentMode = new TransitionMode(now);
+      frame = this.currentMode.computeFrame(viewerState, { cameraX: camera.position.x, rotation: mesh.quaternion }, now);
+    } else if (frame.modeChange === 'startGamingMode') {
+      this.currentMode = this.createGamingMode();
+    }
 
     camera.position.x = frame.cameraX;
     mesh.quaternion.copy(frame.rotation);
-
-    if (frame.transition === 'startCompletionMode') {
-      this.currentMode = new CompletionMode(frame.rotation, frame.cameraX, now);
-    } else if (frame.transition === 'startNewRound') {
-      this.startNewRound();
-    }
 
     if (frame.fireBeat && !this.muted && this.drumPlayer) {
       this.drumPlayer.play();
@@ -133,7 +131,6 @@ export class SceneController {
       this.noisePlayer.setGain(this.muted ? 0 : frame.noiseGain);
     }
 
-    this.currentGrayscalePbrNoiseBlend = frame.grayscalePbrNoiseBlend;
-    this.currentPbrColorBlend = frame.pbrColorBlend;
+    this.renderPipeline.setBlends(frame.grayscalePbrNoiseBlend, frame.pbrColorBlend, frame.captureBlend);
   }
 }
