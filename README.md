@@ -1,6 +1,6 @@
 # White Noise Space
 
-An interactive browser application where 3D objects are hidden in procedural white noise and only become visible through motion. The viewer's face position — tracked in real time via webcam — rotates the object and adjusts the camera, making the noise shift and reveal the object's shape.
+An interactive browser game where 3D objects are hidden in procedural white noise and only become visible through motion. The viewer's face — tracked in real time via webcam — rotates the object, making the noise shift and reveal its shape. Once upright, a color reveal sequence plays before the next object loads.
 
 ## Setup
 
@@ -10,62 +10,60 @@ bash download_model.sh   # downloads face detection model (~8MB, one-time)
 npm start                # dev server at http://localhost:5173
 ```
 
+> **3D models are not included in this repository.** Add GLB files to a `scenes/` folder (not part of the repo) in the project root — they will be picked up automatically. Per-model scale and rotation can be configured in `sceneConfig.ts`.
+
 Open [http://localhost:5173](http://localhost:5173) in a browser with webcam access.
 
 ## How it works
 
-- A Utah teapot (or any 3D geometry) is rendered with an anisotropic white noise shader — statistically identical to the background at rest
+- 3D objects (loaded from GLB files) are rendered with an anisotropic white noise shader — statistically identical to the background at rest
 - Head movement tracked via MediaPipe FaceLandmarker rotates the object; the noise shifts with it, making the shape visible through motion
-- Viewer distance drives the digital camera position to keep the apparent object size roughly constant
-- In continuous mode, rotation is driven by a BPM beat system: head movement is weighted by beat phase and decays over the cycle
+- As the object approaches upright, a grayscale PBR render fades in through the noise
+- When upright, a completion sequence auto-rotates the object to face the camera, fades in full color, then transitions to the next object
 
 ## Configuration
 
-**BPM and beat timing** — set in `animation.ts`:
+**Per-model scale and rotation** — edit `sceneConfig.ts`:
 ```ts
-export const BPM: number = 60;
+const overrides: Record<string, SceneOverride> = {
+  'myObject.glb': { scale: 1.5, rotationX: 90 },
+};
 ```
-
-**Animation mode** — also in `animation.ts`, change the default:
-```ts
-let mode: Mode = 'continuous'; // 'direct' | 'continuous'
-```
-- `direct` — rotation tracks viewer every frame
-- `continuous` — per-frame rotation weighted by beat phase; fades to zero as the cycle completes
 
 **Webcam setup preset** — called in `main.ts`:
 ```ts
 setUpDefault(); // MacBook Pro 14" M3, webcam at top center of screen
 // setUpHome(); // external monitor, offset webcam
 ```
-To add a new preset, define it in `viewer.ts` following the same pattern — set `screenSize`, `cameraPosition`, `cameraForward`, `cameraUp`.
-
-**Geometry** — swap in `main.ts`:
-```ts
-sceneMesh = buildMesh(vertSrc, fragSrc, new TeapotGeometry(0.65));
-// e.g. new THREE.BoxGeometry(1, 1, 1), new THREE.SphereGeometry(0.8)
-```
 
 ## UI controls
 
 - **res slider** — scales render resolution (lower = more pixelated, faster)
+- **BPM slider** — sets beat timing for head movement gating
 - **mute button** — silences all audio
-- **mode button** — toggles between direct and continuous animation mode
+- **restart button** — restarts the game loop from the first object
+- **`d` key** — toggle debug mode (shows objects in PBR at identity rotation, no noise)
+- **`n` key** — cycle to next model (debug mode only)
 
 ## Architecture
 
 ```
-webcam → MediaPipe FaceLandmarker → viewer.ts → animation.ts → Three.js scene
-                                                             ↘ audio.ts
+webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderPipeline → screen
+                                                               ↘ audio.ts
 ```
 
 | File | Purpose |
 |---|---|
-| `main.ts` | Init, render loop, Three.js scene setup |
-| `viewer.ts` | Face tracking → world-space viewer position, forward, distance |
-| `animation.ts` | Two animation modes, beat timing, camera + rotation update |
-| `audio.ts` | Looped noise playback, beat-synced click, mute control |
-| `geometry.ts` | Shader geometry preprocessing (`buildMesh`) |
+| `main.ts` | Init, render loop, debug mode |
+| `viewer.ts` | Face tracking → world-space viewer position |
+| `modeController.ts` | Mode orchestration, game loop, audio triggering |
+| `renderPipeline.ts` | Three.js scenes, render targets, blit shader, mesh cycling |
+| `modeGaming.ts` | Interactive rotation phase |
+| `modeCompletion.ts` | Color reveal sequence |
+| `modeTransition.ts` | Frozen capture fade between objects |
+| `sceneConfig.ts` | Per-GLB scale and rotation overrides |
+| `geometry.ts` | Noise shader geometry preprocessing |
+| `audio.ts` / `audioPlayer.ts` | Web Audio playback |
 | `export-shader/` | Anisotropic noise GLSL shader |
 
 ## Tech
@@ -75,4 +73,4 @@ webcam → MediaPipe FaceLandmarker → viewer.ts → animation.ts → Three.js 
 - [Vite](https://vite.dev) — dev server and bundler
 - TypeScript
 - Custom anisotropic noise GLSL shader (see `export-shader/setup.md`)
-- Web Audio API — looped noise file + beat-synced click
+- Web Audio API — looped noise + beat-synced drum

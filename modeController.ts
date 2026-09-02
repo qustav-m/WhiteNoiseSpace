@@ -43,14 +43,13 @@ export class ModeController {
 
   initialize(renderPipeline: RenderPipeline): void {
     this.renderPipeline = renderPipeline;
-    this.switchToNextScene(renderPipeline.sceneMesh);
+    this.switchToNextScene(renderPipeline.sceneAnchor);
     this.currentMode = this.createGamingMode();
   }
 
-  private switchToNextScene(mesh: THREE.Mesh): void {
-    // TODO: swap to next glTF model and position it
-    const newRotation = randomStartRotation();
-    mesh.quaternion.copy(newRotation);
+  private switchToNextScene(anchor: THREE.Object3D): void {
+    this.renderPipeline.switchToNextScene();
+    anchor.quaternion.copy(randomStartRotation());
   }
 
   private createGamingMode(): GamingMode {
@@ -77,7 +76,7 @@ export class ModeController {
 
   update(now: number): void {
     const camera = this.renderPipeline.camera;
-    const mesh = this.renderPipeline.sceneMesh;
+    const anchor = this.renderPipeline.sceneAnchor;
 
     if (faceDetected) {
       if (this.speedLastPosition !== null && this.speedLastTime > 0) {
@@ -105,7 +104,7 @@ export class ModeController {
 
     const sceneState: SceneState = {
       cameraX: camera.position.x,
-      rotation: mesh.quaternion.clone(),
+      rotation: anchor.quaternion.clone(),
     };
 
     let frame = this.currentMode.computeFrame(viewerState, sceneState, now);
@@ -114,15 +113,15 @@ export class ModeController {
       this.currentMode = new CompletionMode(frame.rotation, frame.cameraX, now);
     } else if (frame.modeChange === 'startTransitionMode') {
       this.renderPipeline.takeCapture();
-      this.switchToNextScene(mesh);
+      this.switchToNextScene(anchor);
       this.currentMode = new TransitionMode(now);
-      frame = this.currentMode.computeFrame(viewerState, { cameraX: camera.position.x, rotation: mesh.quaternion }, now);
+      frame = this.currentMode.computeFrame(viewerState, { cameraX: camera.position.x, rotation: anchor.quaternion }, now);
     } else if (frame.modeChange === 'startGamingMode') {
       this.currentMode = this.createGamingMode();
     }
 
     camera.position.x = frame.cameraX;
-    mesh.quaternion.copy(frame.rotation);
+    anchor.quaternion.copy(frame.rotation);
 
     if (frame.fireBeat && !this.muted && this.drumPlayer) {
       this.drumPlayer.play();

@@ -14,23 +14,28 @@ bash download_model.sh # download face detection model (~8MB, one-time)
 npm start              # dev server at http://localhost:5173
 ```
 
+**3D models are not included in this repository.** Add GLB files to a `scenes/` folder in the project root — they are picked up automatically via `import.meta.glob`. Per-model scale and rotation are configured in `sceneConfig.ts`.
+
 ## Architecture
 
-**Pipeline:** webcam → MediaPipe FaceLandmarker → viewer world position → SceneController (mode system) → Three.js scene (rotation + camera) + dual render targets (noise shader + PBR shader) → blit shader (blend formula)
+**Pipeline:** webcam → MediaPipe FaceLandmarker → viewer world position → ModeController (mode system) → Three.js scene (rotation + camera) + dual render targets (noise shader + PBR shader) → blit shader (blend formula)
 
 ### Files
 
 | File | Purpose |
 |---|---|
 | [index.html](index.html) | Canvas, hidden video, resolution slider, mute button |
-| [main.ts](main.ts) | Init, render loop, Three.js scene setup, render targets, blit shader |
+| [main.ts](main.ts) | Init, render loop, debug mode (`d` = toggle, `n` = next model) |
 | [viewer.ts](viewer.ts) | Viewer tracking: `calculateViewer`, setup functions, viewer state |
 | [geometry.ts](geometry.ts) | `addTriangleAttribs`, `buildMesh` — noise shader geometry preprocessing |
 | [frameState.ts](frameState.ts) | Types: `ViewerState`, `SceneState`, `FrameState` |
 | [mode.ts](mode.ts) | Abstract `AnimationMode` base class |
-| [modeGame.ts](modeGame.ts) | Interactive phase — head movement rotates object, angle drives blend |
-| [modeComplete.ts](modeComplete.ts) | Completion sequence — auto-rotation to upright + facing camera, saturation reveal |
-| [sceneController.ts](sceneController.ts) | Orchestrates modes, applies `FrameState` to scene, manages game loop |
+| [modeGaming.ts](modeGaming.ts) | Interactive phase — head movement rotates object, angle drives blend |
+| [modeCompletion.ts](modeCompletion.ts) | Completion sequence — auto-rotation to upright + facing camera, saturation reveal |
+| [modeTransition.ts](modeTransition.ts) | Transition phase — frozen capture fades to noise before next round |
+| [modeController.ts](modeController.ts) | Orchestrates modes, applies `FrameState` to scene, manages game loop |
+| [renderPipeline.ts](renderPipeline.ts) | All Three.js rendering: scenes, render targets, blit shader, mesh management |
+| [sceneConfig.ts](sceneConfig.ts) | Per-GLB scale multiplier and rotation overrides |
 | [audio.ts](audio.ts) | Audio setup: noise player + drum player |
 | [audioPlayer.ts](audioPlayer.ts) | `AudioPlayer` — loads and plays an audio buffer with gain control |
 | [noise.mp3](noise.mp3) | Looped noise sound, gain driven by rotation speed |
@@ -51,24 +56,29 @@ Screen fixed at origin, screen normal = +x
 
 ### Game loop
 
-1. **Game phase (`modeGame`)** — object starts at a random rotation where local up is far from world up. Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed.
+1. **Gaming phase (`modeGaming`)** — object starts at a random rotation where local up is far from world up. Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed.
 
-2. **Completion phase (`modeComplete`)** — triggers when the angle between local up and world up falls below `completionThresholdDeg` (default 10°). The object auto-rotates toward upright + camera-facing, camera animates to `targetCameraX`, saturation fades in. Noise audio plays proportional to the auto-rotation speed. After `holdDuration` ms at full reveal, the next object loads and the loop restarts.
+2. **Completion phase (`modeCompletion`)** — triggers when the angle between local up and world up falls below `completionThresholdDeg` (default 10°). The object auto-rotates toward upright (anchor identity quaternion) + camera-facing, camera animates to `targetCameraX`, saturation fades in. After `holdDuration` ms at full reveal, transitions to transition phase.
+
+3. **Transition phase (`modeTransition`)** — a frozen capture of the completed reveal fades back to noise while the next object is already loaded. After `duration` ms, switches to a new gaming phase with the next model.
 
 ### 3D Models
 
-Models are loaded as glTF files. Each model is wrapped in an anchor `Object3D`:
+Models are GLB files in `scenes/` (not tracked in git). `main.ts` discovers them via `import.meta.glob('./scenes/*.glb')`, loads all at startup with `GLTFLoader`, extracts the first mesh geometry from each, and passes the array to `RenderPipeline`.
+
+`sceneConfig.ts` maps filenames to per-model overrides: `scale` (multiplier on top of normalized size), `rotationX/Y/Z` (degrees). Defaults: `scale: 1`, all rotations `0`.
+
+Each model gets two pre-built meshes (noise shader + PBR), both stored in `RenderPipeline`. The scene hierarchy is:
 
 ```
-scene
-  └── anchor  (gameplay rotation — controlled by SceneController)
-        └── coordinateAdapter  (static rotation — maps glTF axes to world axes)
-              └── glTF scene
+noiseScene / pbrScene
+  └── anchor  (game rotation — quaternion set by ModeController each frame)
+        └── mesh  (static scale + rotation from sceneConfig, set once at load)
 ```
 
-The `SceneController` applies `frame.rotation` to the anchor's quaternion. The `coordinateAdapter` is set once per model to align glTF's natural orientation with world space (local Y = world Y, local front = toward camera). This way `anchor.quaternion = identity` means "upright, front facing camera" — the completion target.
+`anchor.quaternion = identity` means "upright, front facing camera" — the completion target. The mesh's own rotation corrects for the GLB's export orientation.
 
-Models are stored in an array and cycled sequentially. Each round starts with a random quaternion applied to the anchor (guaranteed to be far from upright, between `startAngleMinDeg` and `startAngleMaxDeg`).
+`RenderPipeline.switchToNextScene()` swaps the current noise+PBR mesh pair out of the anchors and puts the next pair in. `ModeController.switchToNextScene()` calls this and applies a new random rotation to the anchor.
 
 ### Viewer tracking (`viewer.ts`)
 
@@ -87,32 +97,33 @@ Anisotropic noise shader — procedural white noise bound to triangle geometry. 
 
 Use `THREE.ShaderMaterial` (not `RawShaderMaterial`) — Three.js injects built-in uniforms and GLSL1 compat macros.
 
-### Render pipeline
+### Render pipeline (`renderPipeline.ts`)
 
-Two render targets at scaled resolution (res slider), blitted to the full canvas via an orthographic camera and a custom blit shader:
+Two render targets (noise + PBR) plus a capture target, all at scaled resolution (res slider). Blitted to the full canvas via an orthographic camera and a custom blit shader:
 
 ```
-noiseRenderTarget  →  blit shader  →  screen
-pbrRenderTarget    ↗
+noiseRenderTarget    →  blit shader  →  screen
+pbrRenderTarget      ↗
+pbrCaptureTarget     ↗
 ```
 
-Blit shader blend formula:
+Blit shader 3-step blend chain:
 
 ```glsl
-gray = luminance(pbr)
-noiseMix = mix(noise, gray, blendFactor)   // angle-driven in game, 1 in complete
-final = mix(noiseMix, pbr, saturation)     // 0 in game, time-driven in complete
+// Step 1: color or grayscale PBR
+pbrValue = max(pbr.r, pbr.g, pbr.b)
+pbrWithColor = mix(vec3(pbrValue), pbr, pbrColorBlend)   // 0 = grayscale, 1 = full color
+
+// Step 2: live PBR or frozen capture
+pbrOrCapture = mix(pbrWithColor, capture, captureBlend)  // 0 = live, 1 = frozen
+
+// Step 3: noise or PBR/capture
+finalColor = mix(noise, pbrOrCapture, grayscalePbrNoiseBlend)  // 0 = noise, 1 = PBR
 ```
 
 `NearestFilter` on render targets preserves per-pixel noise shader correctness.
 
-### Interpolation functions
-
-Each mode file defines its own `interpolationCurve(t: number): number` function at the top — the single place to tune the visual feel of that phase. Both take `t ∈ [0, 1]` and return `[0, 1]`.
-
-- **`modeGame`** — `interpolationCurve` is called via `blendFromAngle(angleDeg)` which normalizes first: `interpolationCurve(angleDeg / 180)`. The result is the `blendFactor` sent to the blit shader.
-
-- **`modeComplete`** — `interpolationCurve` is called with time progress `t = elapsed / activeDuration`. Its output drives rotation (slerp toward target), camera X (lerp toward `targetCameraX`), saturation, and noise gain — all in lockstep on the same curve.
+`takeCapture()` renders the blit scene to `pbrCaptureTarget` (freezing the current output). Called at the moment `modeCompletion` signals transition, before the new mesh is loaded.
 
 ### Frame data flow
 
@@ -122,30 +133,40 @@ Each mode file defines its own `interpolationCurve(t: number): number` function 
 interface FrameState {
   cameraX: number;
   rotation: THREE.Quaternion;
-  blendFactor: number; // 0 = noise only, 1 = grayscale PBR
-  saturation: number;  // 0 = grayscale, 1 = full color PBR
+  pbrColorBlend: number;          // 0 = grayscale PBR, 1 = full color PBR
+  captureBlend: number;           // 0 = live PBR pipeline, 1 = frozen capture
+  grayscalePbrNoiseBlend: number; // 0 = noise only, 1 = PBR/capture
   noiseGain: number;
   fireBeat: boolean;
+  modeChange: 'startCompletionMode' | 'startTransitionMode' | 'startGamingMode' | null;
 }
 ```
 
-`SceneController.update()` builds `ViewerState` and `SceneState` from current live values, calls `currentMode.computeFrame()`, applies the result to the Three.js camera and mesh, fires audio events, and checks mode-transition conditions.
+`ModeController.update()` builds `ViewerState` and `SceneState`, calls `currentMode.computeFrame()`, handles `modeChange` transitions, applies the result to the Three.js camera and anchor, fires audio events, and calls `renderPipeline.setBlends()`.
 
-### SceneController (`sceneController.ts`)
+### ModeController (`modeController.ts`)
 
-- Owns the mode instances and transitions between them
+- Owns mode instances and transitions between them
 - Computes `speedFactor` (head movement speed, clamped [0,1]) and injects it into `ViewerState`
-- On game phase: checks if angle < `completionThresholdDeg` → switches to `CompleteMode`
-- On complete phase: checks `CompleteMode.isFinished` → calls `startNewRound()` (random rotation + new `GameMode`)
-- Applies pending rotation to mesh at round start
-- Exposes `blendFactor` and `saturation` getters for the blit shader uniforms
+- Imports and holds a reference to `RenderPipeline` (set via `initialize(renderPipeline)`)
+- On `startTransitionMode`: calls `renderPipeline.takeCapture()`, then `switchToNextScene()`, then creates `TransitionMode`
+- On `startGamingMode`: creates a new `GamingMode`
+- `initialize(renderPipeline)` sets up the first scene and gaming mode; also called by the restart button
+
+### Interpolation functions
+
+Each mode file defines its own `interpolationCurve(t: number): number` at the top — the single place to tune the visual feel of that phase.
+
+- **`modeGaming`** — `interpolationCurve` called via `blendFromAngle(angleDeg)`: `interpolationCurve(angleDeg / 180)` → `grayscalePbrNoiseBlend`
+- **`modeCompletion`** — `interpolationCurve(elapsed / activeDuration)` drives rotation slerp, camera X lerp, `pbrColorBlend`, and noise gain in lockstep
+- **`modeTransition`** — `interpolationCurve(elapsed / duration)` drives `grayscalePbrNoiseBlend` from 1→0 (fade to noise) while `captureBlend = 1`
 
 ### Audio (`audio.ts`, `audioPlayer.ts`)
 
 `AudioPlayer` wraps a decoded `AudioBuffer` with a `GainNode`. `initAudio()` loads two players: noise (looped) and drum (one-shot).
 
-- **Noise gain** — set every frame from `frame.noiseGain`; proportional to movement speed (head in game phase, auto-rotation angular velocity in complete phase). Ramped smoothly via `cancelAndHoldAtTime` + `linearRampToValueAtTime`.
-- **Drum** — fired on `frame.fireBeat` (game phase only, beat-synced).
+- **Noise gain** — set every frame from `frame.noiseGain`; proportional to movement speed. Ramped smoothly via `cancelAndHoldAtTime` + `linearRampToValueAtTime`.
+- **Drum** — fired on `frame.fireBeat` (gaming phase only, beat-synced).
 
 Signal chain: `source → gainNode → destination`
 

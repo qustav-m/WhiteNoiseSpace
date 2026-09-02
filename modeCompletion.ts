@@ -6,14 +6,7 @@ function interpolationCurve(t: number): number {
   return Math.min(t * 2, 1);
 }
 
-// Target: object local Y = world up, object local -Z faces camera (+X world direction)
-const targetRotation: THREE.Quaternion = new THREE.Quaternion().setFromRotationMatrix(
-  new THREE.Matrix4().makeBasis(
-    new THREE.Vector3(0, 0, 1),
-    new THREE.Vector3(0, 1, 0),
-    new THREE.Vector3(-1, 0, 0),
-  )
-);
+const targetRotation: THREE.Quaternion = new THREE.Quaternion(); // identity = upright, facing camera
 
 const targetCameraX: number = 2.0;
 const noiseGainScale: number = 500; // radians/ms → gain [0, 1]

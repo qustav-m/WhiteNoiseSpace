@@ -1,12 +1,33 @@
+import * as THREE from 'three';
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
-import { TeapotGeometry } from 'three/examples/jsm/geometries/TeapotGeometry.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { calculateViewer, setUpDefault } from './viewer';
 import { ModeController } from './modeController';
-import { RenderPipeline } from './renderPipeline';
+import { RenderPipeline, SceneSetup } from './renderPipeline';
+import { resolveSceneConfig } from './sceneConfig';
 import { initAudio } from './audio';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
+
+async function loadSceneGeometries(): Promise<SceneSetup[]> {
+  const glbEntries = Object.entries(
+    import.meta.glob('./scenes/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>
+  );
+  const loader = new GLTFLoader();
+  return Promise.all(glbEntries.map(async ([path, url]) => {
+    const filename = path.split('/').pop()!;
+    const gltf = await loader.loadAsync(url);
+    let geometry: THREE.BufferGeometry | null = null;
+    gltf.scene.traverse(child => {
+      if (!geometry && (child as THREE.Mesh).isMesh) {
+        geometry = (child as THREE.Mesh).geometry;
+      }
+    });
+    if (!geometry) throw new Error(`No mesh found in ${url}`);
+    return { geometry: geometry as THREE.BufferGeometry, ...resolveSceneConfig(filename) };
+  }));
+}
 
 let status!: HTMLElement;
 let video!: HTMLVideoElement;
@@ -14,9 +35,18 @@ let landmarker!: FaceLandmarker;
 let modeController!: ModeController;
 let renderPipeline!: RenderPipeline;
 let resolutionScale: number = 1.0;
+let debugMode: boolean = false;
 
 function loop(): void {
   requestAnimationFrame(loop);
+
+  if (debugMode) {
+    renderPipeline.camera.position.set(0, 0, 0);
+    renderPipeline.sceneAnchor.quaternion.identity();
+    renderPipeline.setBlends(1, 1, 0);
+    renderPipeline.render();
+    return;
+  }
 
   const now = Date.now();
   const result = landmarker.detectForVideo(video, now);
@@ -59,8 +89,11 @@ async function init(): Promise<void> {
     fetch('./export-shader/fragment.glsl').then(r => r.text()),
   ]);
 
+  status.textContent = 'Loading models…';
+  const geometries = await loadSceneGeometries();
+
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  renderPipeline = new RenderPipeline(canvas, vertexSource, fragmentSource, new TeapotGeometry(0.65));
+  renderPipeline = new RenderPipeline(canvas, vertexSource, fragmentSource, geometries);
   renderPipeline.setResolution(resolutionScale);
   modeController.initialize(renderPipeline);
 
@@ -89,6 +122,15 @@ async function init(): Promise<void> {
   const modeButton = document.getElementById('btn-mode') as HTMLButtonElement;
   modeButton.textContent = 'restart';
   modeButton.addEventListener('click', () => modeController.initialize(renderPipeline));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'd') {
+      debugMode = !debugMode;
+      if (!debugMode) modeController.initialize(renderPipeline);
+      status.textContent = debugMode ? 'debug' : 'Running';
+    }
+    if (e.key === 'n' && debugMode) renderPipeline.switchToNextScene();
+  });
 
   status.textContent = 'Running';
   requestAnimationFrame(loop);
