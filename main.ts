@@ -1,39 +1,20 @@
 import * as THREE from 'three';
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { calculateViewer, setUpDefault } from './viewer';
 import { ModeController } from './modeController';
-import { RenderPipeline, SceneSetup } from './renderPipeline';
-import { resolveSceneConfig } from './sceneConfig';
+import { RenderPipeline } from './renderPipeline';
+import { SceneLoader } from './sceneLoader';
 import { initAudio } from './audio';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
-
-async function loadSceneGeometries(): Promise<SceneSetup[]> {
-  const glbEntries = Object.entries(
-    import.meta.glob('./scenes/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>
-  );
-  const loader = new GLTFLoader();
-  return Promise.all(glbEntries.map(async ([path, url]) => {
-    const filename = path.split('/').pop()!;
-    const gltf = await loader.loadAsync(url);
-    let geometry: THREE.BufferGeometry | null = null;
-    gltf.scene.traverse(child => {
-      if (!geometry && (child as THREE.Mesh).isMesh) {
-        geometry = (child as THREE.Mesh).geometry;
-      }
-    });
-    if (!geometry) throw new Error(`No mesh found in ${url}`);
-    return { geometry: geometry as THREE.BufferGeometry, ...resolveSceneConfig(filename) };
-  }));
-}
 
 let status!: HTMLElement;
 let video!: HTMLVideoElement;
 let landmarker!: FaceLandmarker;
 let modeController!: ModeController;
 let renderPipeline!: RenderPipeline;
+let sceneLoader!: SceneLoader;
 let resolutionScale: number = 1.0;
 let debugMode: boolean = false;
 
@@ -42,7 +23,7 @@ function loop(): void {
 
   if (debugMode) {
     renderPipeline.camera.position.set(0, 0, 0);
-    renderPipeline.sceneAnchor.quaternion.identity();
+    renderPipeline.setModelRotation(new THREE.Quaternion());
     renderPipeline.setBlends(1, 1, 0);
     renderPipeline.render();
     return;
@@ -83,19 +64,14 @@ async function init(): Promise<void> {
   modeController = new ModeController();
   modeController.setAudioPlayers(noisePlayer, drumPlayer);
 
-  status.textContent = 'Loading shaders…';
-  const [vertexSource, fragmentSource] = await Promise.all([
-    fetch('./export-shader/vertex.glsl').then(r => r.text()),
-    fetch('./export-shader/fragment.glsl').then(r => r.text()),
-  ]);
-
   status.textContent = 'Loading models…';
-  const geometries = await loadSceneGeometries();
+  sceneLoader = new SceneLoader();
+  await sceneLoader.firstReady;
 
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  renderPipeline = new RenderPipeline(canvas, vertexSource, fragmentSource, geometries);
+  renderPipeline = new RenderPipeline(canvas);
   renderPipeline.setResolution(resolutionScale);
-  modeController.initialize(renderPipeline);
+  modeController.initialize(renderPipeline, sceneLoader);
 
   window.addEventListener('resize', () => renderPipeline.handleResize(resolutionScale));
 
@@ -121,15 +97,17 @@ async function init(): Promise<void> {
 
   const modeButton = document.getElementById('btn-mode') as HTMLButtonElement;
   modeButton.textContent = 'restart';
-  modeButton.addEventListener('click', () => modeController.initialize(renderPipeline));
+  modeButton.addEventListener('click', () => modeController.initialize(renderPipeline, sceneLoader));
 
   document.addEventListener('keydown', e => {
     if (e.key === 'd') {
       debugMode = !debugMode;
-      if (!debugMode) modeController.initialize(renderPipeline);
+      if (!debugMode) modeController.initialize(renderPipeline, sceneLoader);
       status.textContent = debugMode ? 'debug' : 'Running';
     }
-    if (e.key === 'n' && debugMode) renderPipeline.switchToNextScene();
+    if (e.key === 'n' && debugMode && sceneLoader.isNextReady) {
+      renderPipeline.switchToModel(sceneLoader.getNext());
+    }
   });
 
   status.textContent = 'Running';

@@ -32,9 +32,11 @@ npm start              # dev server at http://localhost:5173
 | [mode.ts](mode.ts) | Abstract `AnimationMode` base class |
 | [modeGaming.ts](modeGaming.ts) | Interactive phase — head movement rotates object, angle drives blend |
 | [modeCompletion.ts](modeCompletion.ts) | Completion sequence — auto-rotation to upright + facing camera, saturation reveal |
-| [modeTransition.ts](modeTransition.ts) | Transition phase — frozen capture fades to noise before next round |
+| [modeCaptureHold.ts](modeCaptureHold.ts) | Holds frozen capture while next model loads; minimum hold via `minDuration` |
+| [modeTransition.ts](modeTransition.ts) | Fades frozen capture back to noise |
 | [modeController.ts](modeController.ts) | Orchestrates modes, applies `FrameState` to scene, manages game loop |
-| [renderPipeline.ts](renderPipeline.ts) | All Three.js rendering: scenes, render targets, blit shader, mesh management |
+| [renderPipeline.ts](renderPipeline.ts) | Three.js rendering: scenes, render targets, blit shader |
+| [sceneLoader.ts](sceneLoader.ts) | Lazy GLB loading: fetches shaders, builds `LoadedModel` pairs, `getNext()` / `dispose()` |
 | [sceneConfig.ts](sceneConfig.ts) | Per-GLB scale multiplier and rotation overrides |
 | [audio.ts](audio.ts) | Audio setup: noise player + drum player |
 | [audioPlayer.ts](audioPlayer.ts) | `AudioPlayer` — loads and plays an audio buffer with gain control |
@@ -58,27 +60,31 @@ Screen fixed at origin, screen normal = +x
 
 1. **Gaming phase (`modeGaming`)** — object starts at a random rotation where local up is far from world up. Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed.
 
-2. **Completion phase (`modeCompletion`)** — triggers when the angle between local up and world up falls below `completionThresholdDeg` (default 10°). The object auto-rotates toward upright (anchor identity quaternion) + camera-facing, camera animates to `targetCameraX`, saturation fades in. After `holdDuration` ms at full reveal, transitions to transition phase.
+2. **Completion phase (`modeCompletion`)** — triggers when the angle between local up and world up falls below `completionThresholdDeg` (default 10°). The object auto-rotates toward upright (identity quaternion) + camera-facing, camera animates to `targetCameraX`, saturation fades in over `activeDuration` ms.
 
-3. **Transition phase (`modeTransition`)** — a frozen capture of the completed reveal fades back to noise while the next object is already loaded. After `duration` ms, switches to a new gaming phase with the next model.
+3. **Capture hold phase (`modeCaptureHold`)** — immediately after completion: takes a frozen capture of the full-color reveal, swaps in the next model (hidden behind the capture), and waits until the model after that is fully preloaded. Holds for at least `minDuration` ms.
 
-### 3D Models
+4. **Transition phase (`modeTransition`)** — once the next model is ready: fades the frozen capture back to noise over `duration` ms, then starts a new gaming phase.
 
-Models are GLB files in `scenes/` (not tracked in git). `main.ts` discovers them via `import.meta.glob('./scenes/*.glb')`, loads all at startup with `GLTFLoader`, extracts the first mesh geometry from each, and passes the array to `RenderPipeline`.
+### 3D Models and lazy loading (`sceneLoader.ts`)
+
+Models are GLB files in `scenes/` (not tracked in git). `SceneLoader` discovers them via `import.meta.glob('./scenes/*.glb')`, fetches the noise shaders, and loads models one at a time on demand.
 
 `sceneConfig.ts` maps filenames to per-model overrides: `scale` (multiplier on top of normalized size), `rotationX/Y/Z` (degrees). Defaults: `scale: 1`, all rotations `0`.
 
-Each model gets two pre-built meshes (noise shader + PBR), both stored in `RenderPipeline`. The scene hierarchy is:
+Each loaded model is a `LoadedModel` — two `THREE.Object3D`s (one for noise, one for PBR) each containing a mesh as a child. The scene hierarchy per model:
 
 ```
 noiseScene / pbrScene
-  └── anchor  (game rotation — quaternion set by ModeController each frame)
+  └── object  (game rotation — quaternion set by ModeController each frame)
         └── mesh  (static scale + rotation from sceneConfig, set once at load)
 ```
 
-`anchor.quaternion = identity` means "upright, front facing camera" — the completion target. The mesh's own rotation corrects for the GLB's export orientation.
+`object.quaternion = identity` means "upright, front facing camera" — the completion target. The mesh's own rotation corrects for the GLB's export orientation.
 
-`RenderPipeline.switchToNextScene()` swaps the current noise+PBR mesh pair out of the anchors and puts the next pair in. `ModeController.switchToNextScene()` calls this and applies a new random rotation to the anchor.
+**Loading flow:** `SceneLoader` always keeps one model preloaded (`pendingModel`). `getNext()` returns it and marks `isNextReady = false`. `dispose(removedModel)` disposes the old model's GPU resources and starts loading the next one, setting `isNextReady = true` when done. At most two models exist in GPU memory at any time (current on screen + pending).
+
+`ModeController.switchToNextScene()` calls `sceneLoader.getNext()` → `renderPipeline.switchToModel(model)` → `sceneLoader.dispose(removedModel)` in sequence, ensuring the old model is removed from the scene before disposal.
 
 ### Viewer tracking (`viewer.ts`)
 
@@ -123,7 +129,7 @@ finalColor = mix(noise, pbrOrCapture, grayscalePbrNoiseBlend)  // 0 = noise, 1 =
 
 `NearestFilter` on render targets preserves per-pixel noise shader correctness.
 
-`takeCapture()` renders the blit scene to `pbrCaptureTarget` (freezing the current output). Called at the moment `modeCompletion` signals transition, before the new mesh is loaded.
+`takeCapture()` renders the blit scene to `pbrCaptureTarget` (freezing the current output). Called when `modeCompletion` signals `startCaptureHoldMode`, before the new model is swapped in.
 
 ### Frame data flow
 
@@ -138,7 +144,7 @@ interface FrameState {
   grayscalePbrNoiseBlend: number; // 0 = noise only, 1 = PBR/capture
   noiseGain: number;
   fireBeat: boolean;
-  modeChange: 'startCompletionMode' | 'startTransitionMode' | 'startGamingMode' | null;
+  modeChange: 'startCompletionMode' | 'startCaptureHoldMode' | 'startTransitionMode' | 'startGamingMode' | null;
 }
 ```
 
@@ -148,10 +154,12 @@ interface FrameState {
 
 - Owns mode instances and transitions between them
 - Computes `speedFactor` (head movement speed, clamped [0,1]) and injects it into `ViewerState`
-- Imports and holds a reference to `RenderPipeline` (set via `initialize(renderPipeline)`)
-- On `startTransitionMode`: calls `renderPipeline.takeCapture()`, then `switchToNextScene()`, then creates `TransitionMode`
+- Holds references to `RenderPipeline` and `SceneLoader` (set via `initialize(renderPipeline, sceneLoader)`)
+- On `startCaptureHoldMode`: calls `renderPipeline.takeCapture()`, then `switchToNextScene()`, then creates `CaptureHoldMode`
+- On `startTransitionMode`: only acts when `sceneLoader.isNextReady` — creates `TransitionMode`
 - On `startGamingMode`: creates a new `GamingMode`
-- `initialize(renderPipeline)` sets up the first scene and gaming mode; also called by the restart button
+- `switchToNextScene()`: calls `sceneLoader.getNext()` → `renderPipeline.switchToModel()` → `sceneLoader.dispose(removedModel)` → applies random start rotation
+- `initialize(renderPipeline, sceneLoader)` sets up the first scene and gaming mode; also called by the restart button
 
 ### Interpolation functions
 

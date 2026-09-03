@@ -1,49 +1,24 @@
 import * as THREE from 'three';
-import { buildMesh } from './geometry';
+import { LoadedModel } from './sceneLoader';
 
-export interface SceneSetup {
-  geometry: THREE.BufferGeometry;
-  scale: number;
-  rotationX: number;
-  rotationY: number;
-  rotationZ: number;
-}
-
-function normalizeGeometry(geometry: THREE.BufferGeometry): number {
-  geometry.computeBoundingBox();
-  const size = new THREE.Vector3();
-  geometry.boundingBox!.getSize(size);
-  const scale = 2 / Math.max(size.x, size.y, size.z);
-  geometry.center();
-  return scale;
-}
 
 export class RenderPipeline {
   readonly camera: THREE.PerspectiveCamera;
-  readonly sceneAnchor: THREE.Object3D;
 
   private readonly renderer: THREE.WebGLRenderer;
   private readonly noiseScene: THREE.Scene;
   private readonly pbrScene: THREE.Scene;
-  private readonly pbrAnchor: THREE.Object3D;
   private readonly blitScene: THREE.Scene;
   private readonly blitCamera: THREE.OrthographicCamera;
   private readonly blitMaterial: THREE.ShaderMaterial;
 
-  private readonly noiseMeshes: THREE.Mesh[];
-  private readonly pbrMeshes: THREE.Mesh[];
-  private currentSceneIndex: number = 0;
+  private currentModel: LoadedModel | null = null;
 
   private noiseRenderTarget: THREE.WebGLRenderTarget | undefined;
   private pbrRenderTarget: THREE.WebGLRenderTarget | undefined;
   private pbrCaptureTarget: THREE.WebGLRenderTarget | undefined;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-    vertexSource: string,
-    fragmentSource: string,
-    scenes: SceneSetup[],
-  ) {
+  constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -51,32 +26,6 @@ export class RenderPipeline {
     this.camera.position.set(0, 0, 0);
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(-1, 0, 0);
-
-    const scales = scenes.map(s => normalizeGeometry(s.geometry));
-    this.noiseMeshes = scenes.map((s, i) => {
-      const mesh = buildMesh(vertexSource, fragmentSource, s.geometry);
-      mesh.scale.setScalar(scales[i] * s.scale);
-      mesh.rotation.set(
-        THREE.MathUtils.degToRad(s.rotationX),
-        THREE.MathUtils.degToRad(s.rotationY),
-        THREE.MathUtils.degToRad(s.rotationZ),
-      );
-      return mesh;
-    });
-    this.pbrMeshes = scenes.map((s, i) => {
-      const mesh = new THREE.Mesh(s.geometry, new THREE.MeshNormalMaterial());
-      mesh.scale.setScalar(scales[i] * s.scale);
-      mesh.rotation.set(
-        THREE.MathUtils.degToRad(s.rotationX),
-        THREE.MathUtils.degToRad(s.rotationY),
-        THREE.MathUtils.degToRad(s.rotationZ),
-      );
-      return mesh;
-    });
-
-    this.sceneAnchor = new THREE.Object3D();
-    this.sceneAnchor.position.set(-2, 0, 0);
-    this.sceneAnchor.add(this.noiseMeshes[0]);
 
     this.noiseScene = new THREE.Scene();
     const bgMaterial = new THREE.ShaderMaterial({
@@ -91,26 +40,20 @@ export class RenderPipeline {
     bgMesh.renderOrder = -1;
     bgMesh.frustumCulled = false;
     this.noiseScene.add(bgMesh);
-    this.noiseScene.add(this.sceneAnchor);
-
-    this.pbrAnchor = new THREE.Object3D();
-    this.pbrAnchor.position.set(-2, 0, 0);
-    this.pbrAnchor.add(this.pbrMeshes[0]);
 
     this.pbrScene = new THREE.Scene();
     this.pbrScene.background = new THREE.Color(0x000000);
-    this.pbrScene.add(this.pbrAnchor);
 
     this.blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.blitScene = new THREE.Scene();
     this.blitMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        noiseTexture:            { value: null },
-        pbrTexture:              { value: null },
-        captureTexture:          { value: null },
-        pbrColorBlend:           { value: 0 },
-        captureBlend:            { value: 0 },
-        grayscalePbrNoiseBlend:  { value: 0 },
+        noiseTexture:           { value: null },
+        pbrTexture:             { value: null },
+        captureTexture:         { value: null },
+        pbrColorBlend:          { value: 0 },
+        captureBlend:           { value: 0 },
+        grayscalePbrNoiseBlend: { value: 0 },
       },
       vertexShader: `
         varying vec2 vUv;
@@ -143,12 +86,27 @@ export class RenderPipeline {
     this.blitScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.blitMaterial));
   }
 
-  switchToNextScene(): void {
-    this.sceneAnchor.remove(this.noiseMeshes[this.currentSceneIndex]);
-    this.pbrAnchor.remove(this.pbrMeshes[this.currentSceneIndex]);
-    this.currentSceneIndex = (this.currentSceneIndex + 1) % this.noiseMeshes.length;
-    this.sceneAnchor.add(this.noiseMeshes[this.currentSceneIndex]);
-    this.pbrAnchor.add(this.pbrMeshes[this.currentSceneIndex]);
+  switchToModel(model: LoadedModel): LoadedModel | null {
+    const removedModel = this.currentModel;
+    if (removedModel) {
+      this.noiseScene.remove(removedModel.noiseObject);
+      this.pbrScene.remove(removedModel.pbrObject);
+    }
+    model.noiseObject.position.set(-2, 0, 0);
+    model.pbrObject.position.set(-2, 0, 0);
+    this.noiseScene.add(model.noiseObject);
+    this.pbrScene.add(model.pbrObject);
+    this.currentModel = model;
+    return removedModel;
+  }
+
+  setModelRotation(q: THREE.Quaternion): void {
+    this.currentModel?.noiseObject.quaternion.copy(q);
+    this.currentModel?.pbrObject.quaternion.copy(q);
+  }
+
+  getModelRotation(): THREE.Quaternion {
+    return this.currentModel?.noiseObject.quaternion.clone() ?? new THREE.Quaternion();
   }
 
   setResolution(scale: number): void {
@@ -193,8 +151,6 @@ export class RenderPipeline {
   }
 
   render(): void {
-    this.pbrAnchor.quaternion.copy(this.sceneAnchor.quaternion);
-
     this.renderer.setRenderTarget(this.pbrRenderTarget ?? null);
     this.renderer.render(this.pbrScene, this.camera);
 

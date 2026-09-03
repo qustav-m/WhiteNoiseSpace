@@ -13,7 +13,6 @@ const noiseGainScale: number = 500; // radians/ms → gain [0, 1]
 
 export class CompletionMode extends AnimationMode {
   private readonly activeDuration: number = 3000; // ms for animated phase
-  private readonly holdDuration: number = 1500;   // ms to hold at full reveal
 
   private readonly startRotation: THREE.Quaternion;
   private readonly startCameraX: number;
@@ -48,8 +47,8 @@ export class CompletionMode extends AnimationMode {
     this.lastFrameRotation = rotation.clone();
     this.lastFrameTime = now;
 
-    const modeChange = timeSinceStart >= this.activeDuration + this.holdDuration
-      ? 'startTransitionMode' as const
+    const modeChange = timeSinceStart >= this.activeDuration
+      ? 'startCaptureHoldMode' as const
       : null;
 
     return {

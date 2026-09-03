@@ -22,5 +22,5 @@ export interface FrameState {
   grayscalePbrNoiseBlend: number; // 0 = noise only, 1 = PBR/capture
   noiseGain: number;
   fireBeat: boolean;
-  modeChange: 'startCompletionMode' | 'startTransitionMode' | 'startGamingMode' | null;
+  modeChange: 'startCompletionMode' | 'startCaptureHoldMode' | 'startTransitionMode' | 'startGamingMode' | null;
 }

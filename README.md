@@ -19,7 +19,7 @@ Open [http://localhost:5173](http://localhost:5173) in a browser with webcam acc
 - 3D objects (loaded from GLB files) are rendered with an anisotropic white noise shader — statistically identical to the background at rest
 - Head movement tracked via MediaPipe FaceLandmarker rotates the object; the noise shifts with it, making the shape visible through motion
 - As the object approaches upright, a grayscale PBR render fades in through the noise
-- When upright, a completion sequence auto-rotates the object to face the camera, fades in full color, then transitions to the next object
+- When upright, a completion sequence auto-rotates the object to face the camera and fades in full color; the next object loads in the background, then a fade to noise transitions to the next round
 
 ## Configuration
 
@@ -57,10 +57,12 @@ webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderP
 | `main.ts` | Init, render loop, debug mode |
 | `viewer.ts` | Face tracking → world-space viewer position |
 | `modeController.ts` | Mode orchestration, game loop, audio triggering |
-| `renderPipeline.ts` | Three.js scenes, render targets, blit shader, mesh cycling |
+| `renderPipeline.ts` | Three.js scenes, render targets, blit shader |
+| `sceneLoader.ts` | Lazy GLB loading — one model preloaded at a time |
 | `modeGaming.ts` | Interactive rotation phase |
 | `modeCompletion.ts` | Color reveal sequence |
-| `modeTransition.ts` | Frozen capture fade between objects |
+| `modeCaptureHold.ts` | Holds frozen capture while next model loads |
+| `modeTransition.ts` | Frozen capture fade to noise |
 | `sceneConfig.ts` | Per-GLB scale and rotation overrides |
 | `geometry.ts` | Noise shader geometry preprocessing |
 | `audio.ts` / `audioPlayer.ts` | Web Audio playback |

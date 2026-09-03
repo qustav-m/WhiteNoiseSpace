@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { GamingMode } from './modeGaming';
 import { CompletionMode } from './modeCompletion';
+import { CaptureHoldMode } from './modeCaptureHold';
 import { TransitionMode } from './modeTransition';
 import { AnimationMode } from './mode';
 import { ViewerState, SceneState } from './frameState';
 import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected } from './viewer';
 import { AudioPlayer } from './audioPlayer';
 import { RenderPipeline } from './renderPipeline';
+import { SceneLoader } from './sceneLoader';
 
 const startAngleMinDeg: number = 60;
 const startAngleMaxDeg: number = 120;
@@ -30,6 +32,7 @@ function randomStartRotation(): THREE.Quaternion {
 
 export class ModeController {
   private renderPipeline!: RenderPipeline;
+  private sceneLoader!: SceneLoader;
   private currentMode!: AnimationMode;
   private currentBPM: number = 30;
 
@@ -41,15 +44,18 @@ export class ModeController {
   private speedLastTime: number = -1;
   private currentSpeedFactor: number = 0;
 
-  initialize(renderPipeline: RenderPipeline): void {
+  initialize(renderPipeline: RenderPipeline, sceneLoader: SceneLoader): void {
     this.renderPipeline = renderPipeline;
-    this.switchToNextScene(renderPipeline.sceneAnchor);
+    this.sceneLoader = sceneLoader;
+    this.switchToNextScene();
     this.currentMode = this.createGamingMode();
   }
 
-  private switchToNextScene(anchor: THREE.Object3D): void {
-    this.renderPipeline.switchToNextScene();
-    anchor.quaternion.copy(randomStartRotation());
+  private switchToNextScene(): void {
+    const model = this.sceneLoader.getNext();
+    const removedModel = this.renderPipeline.switchToModel(model);
+    this.sceneLoader.dispose(removedModel);
+    this.renderPipeline.setModelRotation(randomStartRotation());
   }
 
   private createGamingMode(): GamingMode {
@@ -76,7 +82,6 @@ export class ModeController {
 
   update(now: number): void {
     const camera = this.renderPipeline.camera;
-    const anchor = this.renderPipeline.sceneAnchor;
 
     if (faceDetected) {
       if (this.speedLastPosition !== null && this.speedLastTime > 0) {
@@ -104,24 +109,27 @@ export class ModeController {
 
     const sceneState: SceneState = {
       cameraX: camera.position.x,
-      rotation: anchor.quaternion.clone(),
+      rotation: this.renderPipeline.getModelRotation(),
     };
 
     let frame = this.currentMode.computeFrame(viewerState, sceneState, now);
 
     if (frame.modeChange === 'startCompletionMode') {
       this.currentMode = new CompletionMode(frame.rotation, frame.cameraX, now);
-    } else if (frame.modeChange === 'startTransitionMode') {
+    } else if (frame.modeChange === 'startCaptureHoldMode') {
       this.renderPipeline.takeCapture();
-      this.switchToNextScene(anchor);
+      this.switchToNextScene();
+      this.currentMode = new CaptureHoldMode(now);
+      frame = this.currentMode.computeFrame(viewerState, { cameraX: camera.position.x, rotation: this.renderPipeline.getModelRotation() }, now);
+    } else if (frame.modeChange === 'startTransitionMode' && this.sceneLoader.isNextReady) {
       this.currentMode = new TransitionMode(now);
-      frame = this.currentMode.computeFrame(viewerState, { cameraX: camera.position.x, rotation: anchor.quaternion }, now);
+      frame = this.currentMode.computeFrame(viewerState, { cameraX: camera.position.x, rotation: this.renderPipeline.getModelRotation() }, now);
     } else if (frame.modeChange === 'startGamingMode') {
       this.currentMode = this.createGamingMode();
     }
 
     camera.position.x = frame.cameraX;
-    anchor.quaternion.copy(frame.rotation);
+    this.renderPipeline.setModelRotation(frame.rotation);
 
     if (frame.fireBeat && !this.muted && this.drumPlayer) {
       this.drumPlayer.play();
