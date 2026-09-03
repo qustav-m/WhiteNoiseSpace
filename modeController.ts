@@ -52,10 +52,12 @@ export class ModeController {
   }
 
   private switchToNextScene(): void {
+    console.log('[memory] before switch:', this.renderPipeline.memoryInfo);
     const model = this.sceneLoader.getNext();
     const removedModel = this.renderPipeline.switchToModel(model);
     this.sceneLoader.dispose(removedModel);
     this.renderPipeline.setModelRotation(randomStartRotation());
+    console.log('[memory] after dispose:', this.renderPipeline.memoryInfo);
   }
 
   private createGamingMode(): GamingMode {

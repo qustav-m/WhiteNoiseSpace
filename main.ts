@@ -106,7 +106,8 @@ async function init(): Promise<void> {
       status.textContent = debugMode ? 'debug' : 'Running';
     }
     if (e.key === 'n' && debugMode && sceneLoader.isNextReady) {
-      renderPipeline.switchToModel(sceneLoader.getNext());
+      const removedModel = renderPipeline.switchToModel(sceneLoader.getNext());
+      sceneLoader.dispose(removedModel);
     }
   });
 

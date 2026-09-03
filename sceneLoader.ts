@@ -8,6 +8,15 @@ export interface LoadedModel {
   pbrObject: THREE.Object3D;
 }
 
+function disposeMaterial(material: THREE.Material): void {
+  material.dispose();
+  Object.entries(material).forEach(([key, value]) => {
+    if (key !== 'envMap' && value instanceof THREE.Texture) {
+      value.dispose();
+    }
+  });
+}
+
 function disposeModel(model: LoadedModel): void {
   [model.noiseObject, model.pbrObject].forEach(object => {
     object.traverse(child => {
@@ -15,7 +24,7 @@ function disposeModel(model: LoadedModel): void {
         const mesh = child as THREE.Mesh;
         mesh.geometry.dispose();
         (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
-          .forEach(m => m.dispose());
+          .forEach(disposeMaterial);
       }
     });
   });
@@ -71,9 +80,12 @@ export class SceneLoader {
     const loader = new GLTFLoader();
     const gltf = await loader.loadAsync(url);
     let geometry: THREE.BufferGeometry | null = null;
+    let pbrMaterial: THREE.Material | THREE.Material[] = new THREE.MeshStandardMaterial();
     gltf.scene.traverse(child => {
       if (!geometry && (child as THREE.Mesh).isMesh) {
-        geometry = (child as THREE.Mesh).geometry;
+        const mesh = child as THREE.Mesh;
+        geometry = mesh.geometry;
+        pbrMaterial = mesh.material;
       }
     });
     if (!geometry) throw new Error(`No mesh in ${filename}`);
@@ -98,7 +110,7 @@ export class SceneLoader {
     const noiseObject = new THREE.Object3D();
     noiseObject.add(noiseMesh);
 
-    const pbrMesh = new THREE.Mesh(geo, new THREE.MeshNormalMaterial());
+    const pbrMesh = new THREE.Mesh(geo, pbrMaterial);
     pbrMesh.scale.setScalar(finalScale);
     pbrMesh.rotation.set(rx, ry, rz);
     const pbrObject = new THREE.Object3D();

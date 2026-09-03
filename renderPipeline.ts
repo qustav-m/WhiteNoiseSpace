@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { LoadedModel } from './sceneLoader';
 
 
@@ -21,6 +22,8 @@ export class RenderPipeline {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
 
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
     this.camera.position.set(0, 0, 0);
@@ -43,6 +46,9 @@ export class RenderPipeline {
 
     this.pbrScene = new THREE.Scene();
     this.pbrScene.background = new THREE.Color(0x000000);
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    this.pbrScene.environment = pmremGenerator.fromScene(new RoomEnvironment()).texture;
+    pmremGenerator.dispose();
 
     this.blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.blitScene = new THREE.Scene();
@@ -117,10 +123,19 @@ export class RenderPipeline {
     this.pbrRenderTarget?.dispose();
     this.pbrCaptureTarget?.dispose();
 
-    const targetOptions = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter };
-    this.noiseRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
-    this.pbrRenderTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
-    this.pbrCaptureTarget = new THREE.WebGLRenderTarget(width, height, targetOptions);
+    this.noiseRenderTarget = new THREE.WebGLRenderTarget(width, height, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+    });
+    this.pbrRenderTarget = new THREE.WebGLRenderTarget(width, height, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      samples: 4,
+    });
+    this.pbrCaptureTarget = new THREE.WebGLRenderTarget(width, height, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+    });
 
     this.blitMaterial.uniforms.noiseTexture.value = this.noiseRenderTarget.texture;
     this.blitMaterial.uniforms.captureTexture.value = this.pbrCaptureTarget.texture;
@@ -128,6 +143,8 @@ export class RenderPipeline {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
+
+  get memoryInfo() { return this.renderer.info.memory; }
 
   handleResize(resolutionScale: number): void {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
