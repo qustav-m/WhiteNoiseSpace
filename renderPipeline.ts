@@ -45,9 +45,11 @@ export class RenderPipeline {
     this.noiseScene.add(bgMesh);
 
     this.pbrScene = new THREE.Scene();
-    this.pbrScene.background = new THREE.Color(0x000000);
     const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-    this.pbrScene.environment = pmremGenerator.fromScene(new RoomEnvironment()).texture;
+    const environmentTexture = pmremGenerator.fromScene(new RoomEnvironment()).texture;
+    this.pbrScene.environment = environmentTexture;
+    this.pbrScene.background = environmentTexture;
+    this.pbrScene.backgroundBlurriness = 0.5;
     pmremGenerator.dispose();
 
     this.blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
