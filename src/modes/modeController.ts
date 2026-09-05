@@ -5,10 +5,10 @@ import { CaptureHoldMode } from './modeCaptureHold';
 import { TransitionMode } from './modeTransition';
 import { AnimationMode } from './mode';
 import { ViewerState, SceneState } from './frameState';
-import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected } from './viewer';
-import { AudioPlayer } from './audioPlayer';
-import { RenderPipeline } from './renderPipeline';
-import { SceneLoader } from './sceneLoader';
+import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected } from '../viewer';
+import { AudioPlayer } from '../audioEngine/audioPlayer';
+import { RenderPipeline } from '../renderPipeline';
+import { SceneLoader } from '../sceneLoader';
 
 const startAngleMinDeg: number = 60;
 const startAngleMaxDeg: number = 120;

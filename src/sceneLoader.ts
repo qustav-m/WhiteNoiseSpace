@@ -39,7 +39,7 @@ export class SceneLoader {
   readonly firstReady: Promise<void>;
 
   constructor() {
-    const glob = import.meta.glob('./scenes/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+    const glob = import.meta.glob('../scenes/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
     this.entries = Object.entries(glob).map(([path, url]) => ({
       filename: path.split('/').pop()!,
       url,

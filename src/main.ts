@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { calculateViewer, setUpDefault } from './viewer';
-import { ModeController } from './modeController';
+import { ModeController } from './modes/modeController';
 import { RenderPipeline } from './renderPipeline';
 import { SceneLoader } from './sceneLoader';
-import { initAudio } from './audio';
+import { initAudio } from './audioEngine/audio';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
