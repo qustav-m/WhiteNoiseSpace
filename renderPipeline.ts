@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { LoadedModel } from './sceneLoader';
+import compositeVertex from './shader/composite-shader/vertex.glsl?raw';
+import compositeFragment from './shader/composite-shader/fragment.glsl?raw';
+import backgroundVertex from './shader/noise-shader/background.vert.glsl?raw';
+import backgroundFragment from './shader/noise-shader/background.frag.glsl?raw';
 
 
 export class RenderPipeline {
@@ -33,11 +37,8 @@ export class RenderPipeline {
     this.noiseScene = new THREE.Scene();
     const bgMaterial = new THREE.ShaderMaterial({
       depthWrite: false,
-      vertexShader: `void main() { gl_Position = vec4(position.xy, 1.0, 1.0); }`,
-      fragmentShader: `
-        float rand(vec2 co) { return fract(sin(dot(co, vec2(127.1, 311.7))) * 43758.5453); }
-        void main() { gl_FragColor = vec4(vec3(rand(floor(gl_FragCoord.xy))), 1.0); }
-      `,
+      vertexShader: backgroundVertex,
+      fragmentShader: backgroundFragment,
     });
     const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial);
     bgMesh.renderOrder = -1;
@@ -63,33 +64,8 @@ export class RenderPipeline {
         captureBlend:           { value: 0 },
         grayscalePbrNoiseBlend: { value: 0 },
       },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D noiseTexture;
-        uniform sampler2D pbrTexture;
-        uniform sampler2D captureTexture;
-        uniform float pbrColorBlend;
-        uniform float captureBlend;
-        uniform float grayscalePbrNoiseBlend;
-        varying vec2 vUv;
-        void main() {
-          vec3 noise = texture2D(noiseTexture, vUv).rgb;
-          vec3 pbr = texture2D(pbrTexture, vUv).rgb;
-          vec3 capture = texture2D(captureTexture, vUv).rgb;
-          float pbrValue = max(pbr.r, max(pbr.g, pbr.b));
-          vec3 pbrWithColor = mix(vec3(pbrValue), pbr, pbrColorBlend);
-          vec3 pbrOrCapture = mix(pbrWithColor, capture, captureBlend);
-          vec3 finalColor = mix(noise, pbrOrCapture, grayscalePbrNoiseBlend);
-          gl_FragColor = vec4(finalColor, 1.0);
-          #include <colorspace_fragment>
-        }
-      `,
+      vertexShader: compositeVertex,
+      fragmentShader: compositeFragment,
     });
     this.blitScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.blitMaterial));
   }

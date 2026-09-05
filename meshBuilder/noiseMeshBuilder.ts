@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import vertSrc from '../shader/noise-shader/vertex.glsl?raw';
+import fragSrc from '../shader/noise-shader/fragment.glsl?raw';
 
 let triSeedCounter: number = 0;
 
-export function addTriangleAttribs(geo: THREE.BufferGeometry): THREE.BufferGeometry {
-  const g = geo.toNonIndexed();
+export function addTriangleAttribs(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const g = geometry.toNonIndexed();
   const pos = g.getAttribute('position') as THREE.BufferAttribute;
   const triCount: number = Math.floor(pos.count / 3);
 
@@ -54,8 +56,8 @@ export function addTriangleAttribs(geo: THREE.BufferGeometry): THREE.BufferGeome
   return g;
 }
 
-export function buildMesh(vertSrc: string, fragSrc: string, geometry: THREE.BufferGeometry): THREE.Mesh {
-  const geo = addTriangleAttribs(geometry);
+export function buildMesh(geometrymetry: THREE.BufferGeometry): THREE.Mesh {
+  const geometry = addTriangleAttribs(geometrymetry);
   const mat = new THREE.ShaderMaterial({ vertexShader: vertSrc, fragmentShader: fragSrc, side: THREE.DoubleSide });
-  return new THREE.Mesh(geo, mat);
+  return new THREE.Mesh(geometry, mat);
 }
