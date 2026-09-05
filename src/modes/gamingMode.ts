@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AnimationMode } from './mode';
+import { AnimationMode } from './animationMode';
 import { ViewerState, SceneState, FrameState } from './frameState';
 
 export class GamingMode extends AnimationMode {

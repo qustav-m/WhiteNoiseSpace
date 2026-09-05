@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { GamingMode } from './modeGaming';
-import { CompletionMode } from './modeCompletion';
-import { CaptureHoldMode } from './modeCaptureHold';
-import { TransitionMode } from './modeTransition';
-import { AnimationMode } from './mode';
+import { GamingMode } from './gamingMode';
+import { CompletionMode } from './completionMode';
+import { CaptureHoldMode } from './captureHoldMode';
+import { TransitionMode } from './transitionMode';
+import { AnimationMode } from './animationMode';
 import { ViewerState, SceneState } from './frameState';
 import { viewerPosition, viewerForward, viewerUp, viewerDistance, faceDetected } from '../viewer';
 import { AudioPlayer } from '../audioEngine/audioPlayer';

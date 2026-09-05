@@ -1,4 +1,4 @@
-import { AnimationMode } from './mode';
+import { AnimationMode } from './animationMode';
 import { ViewerState, SceneState, FrameState } from './frameState';
 
 const minDuration: number = 500; // ms
