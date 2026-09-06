@@ -18,6 +18,13 @@ let renderPipeline!: RenderPipeline;
 let sceneLoader!: SceneLoader;
 let resolutionScale: number = 1.0;
 let debugMode: boolean = false;
+let uiHidden: boolean = false;
+
+function hideUi(hidden: boolean): void {
+  uiHidden = hidden;
+  const ui = document.getElementById('ui')!;
+  ui.style.display = hidden ? 'none' : '';
+}
 
 function loop(): void {
   requestAnimationFrame(loop);
@@ -37,7 +44,7 @@ function loop(): void {
   renderPipeline.render();
 
   const tracked = result.facialTransformationMatrixes?.length;
-  status.textContent = tracked ? '' : 'no face detected';
+  status.textContent = tracked || uiHidden ? '' : 'no face detected';
   status.style.color = tracked ? '' : '#f44';
 }
 
@@ -113,6 +120,7 @@ async function init(): Promise<void> {
       const removedModel = renderPipeline.switchToModel(sceneLoader.getNext());
       sceneLoader.dispose(removedModel);
     }
+    if (e.key === 'i') hideUi(!uiHidden);
   });
 
   status.textContent = 'Running';
