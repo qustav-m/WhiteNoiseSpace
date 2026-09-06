@@ -74,6 +74,7 @@ export class RenderPipeline {
         pbrColorBlend:          { value: 0 },
         captureBlend:           { value: 0 },
         grayscalePbrNoiseBlend: { value: 0 },
+        time:                   { value: 0 },
       },
       vertexShader: compositeVertex,
       fragmentShader: compositeFragment,
@@ -158,6 +159,7 @@ export class RenderPipeline {
   }
 
   render(): void {
+    this.blitMaterial.uniforms.time.value += 0.01;
     this.renderer.setRenderTarget(this.pbrRenderTarget ?? null);
     this.renderer.render(this.pbrScene, this.camera);
 
