@@ -46,6 +46,7 @@ setUpDefault(); // MacBook Pro 14" M3, webcam at top center of screen
 - **restart button** — restarts the game loop from the first object
 - **`d` key** — toggle debug mode (shows objects in PBR at identity rotation, no noise)
 - **`n` key** — cycle to next model (debug mode only)
+- **`i` key** — toggle UI visibility (hides all controls and status messages)
 
 ## Architecture
 

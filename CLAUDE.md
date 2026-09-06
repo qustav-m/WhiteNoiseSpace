@@ -117,7 +117,7 @@ Use `THREE.ShaderMaterial` (not `RawShaderMaterial`) — Three.js injects built-
 
 Custom Cook-Torrance BRDF with GGX distribution, Smith geometry, and Schlick Fresnel. Built in `pbrMeshBuilder.ts` as a `THREE.ShaderMaterial`.
 
-**Lighting:** one point light (`lightPosition`, `lightIntensity` uniforms in `pbrMeshBuilder.ts`) plus specular-only IBL from the EXR env map sampled at the reflection direction. Ambient is a flat constant `0.03 * albedo`.
+**Lighting:** one point light (`lightPosition`, `lightIntensity` uniforms in `pbrMeshBuilder.ts`) with no distance falloff (`Li = vec3(lightIntensity)`) plus specular-only IBL from the EXR env map sampled at the reflection direction (`envSpecular * 0.7`). Ambient is a flat constant `0.2 * albedo`.
 
 **Tangent handling:** Three.js does NOT inject `attribute vec4 tangent` for `ShaderMaterial` (only for built-in materials). It is declared explicitly in `vertex.glsl` and bound by name from `geometry.attributes.tangent`. `pbrMeshBuilder.ts` ensures tangents always exist: calls `geometry.computeTangents()` if the geometry is indexed with UVs, otherwise falls back to a dummy `(1,0,0,1)` attribute (disables normal mapping for that mesh).
 
@@ -137,7 +137,7 @@ pbrRenderTarget      ↗
 pbrCaptureTarget     ↗
 ```
 
-Composite shader 3-step blend chain (`src/shader/composite-shader/fragment.glsl`):
+Composite shader blend chain (`src/shader/composite-shader/fragment.glsl`):
 
 ```glsl
 // Step 1: color or grayscale PBR
@@ -147,9 +147,12 @@ pbrWithColor = mix(vec3(pbrValue), pbr, pbrColorBlend)   // 0 = grayscale, 1 = f
 // Step 2: live PBR or frozen capture
 pbrOrCapture = mix(pbrWithColor, capture, captureBlend)  // 0 = live, 1 = frozen
 
-// Step 3: noise or PBR/capture
-finalColor = mix(noise, pbrOrCapture, grayscalePbrNoiseBlend)  // 0 = noise, 1 = PBR
+// Step 3: stochastic threshold — per-fragment random value changes each frame
+rand = hash(vUv + fract(time))
+finalColor = grayscalePbrNoiseBlend > rand ? pbrOrCapture : noise
 ```
+
+`time` increments by `0.01` each frame in `render()` — controls flicker speed. `hash()` is a sin-based 2D hash giving a statistically independent value per fragment. The stochastic threshold means the transition between noise and PBR appears as per-pixel flickering rather than a smooth dissolve.
 
 `NearestFilter` on render targets preserves per-pixel noise shader correctness.
 
