@@ -96,9 +96,9 @@ void main() {
   vec3 reflDir = reflect(-V, N);
   vec3 envColor = texture2D(envMap, equirectUv(reflDir)).rgb;
   vec3 envF = fresnelSchlick(NdotV, F0);
-  vec3 envSpecular = envF * envColor * (1.0 - roughness);
+  vec3 envSpecular = envF * envColor * (1.0 - roughness) * 0.7;
 
-  vec3 ambient = vec3(0.03) * albedo;
+  vec3 ambient = vec3(0.2) * albedo;
   vec3 color = ambient + Lo + envSpecular;
 
   gl_FragColor = vec4(color, 1.0);
