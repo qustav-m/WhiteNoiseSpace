@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildMesh } from './meshBuilder/noiseMeshBuilder';
 import { buildPbrMesh } from './meshBuilder/pbrMeshBuilder';
 import { resolveSceneConfig } from './sceneConfig';
+import { getEnvironmentMap } from './environmentMap';
 
 export interface LoadedModel {
   noiseObject: THREE.Object3D;
@@ -11,11 +12,20 @@ export interface LoadedModel {
 
 function disposeMaterial(material: THREE.Material): void {
   material.dispose();
-  Object.entries(material).forEach(([key, value]) => {
-    if (key !== 'envMap' && value instanceof THREE.Texture) {
-      value.dispose();
-    }
-  });
+  if (material instanceof THREE.ShaderMaterial) {
+    const environmentMap = getEnvironmentMap();
+    Object.values(material.uniforms).forEach(uniform => {
+      if (uniform.value instanceof THREE.Texture && uniform.value !== environmentMap) {
+        uniform.value.dispose();
+      }
+    });
+  } else {
+    Object.entries(material).forEach(([key, value]) => {
+      if (key !== 'envMap' && value instanceof THREE.Texture) {
+        value.dispose();
+      }
+    });
+  }
 }
 
 function disposeModel(model: LoadedModel): void {

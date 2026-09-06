@@ -1,0 +1,15 @@
+import * as THREE from 'three';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
+import exrUrl from '../environmentMap/environmentMap.exr?url';
+
+let environmentMap: THREE.Texture | null = null;
+
+export async function initEnvironmentMap(): Promise<void> {
+  const loader = new EXRLoader();
+  environmentMap = await loader.loadAsync(exrUrl);
+  environmentMap.mapping = THREE.EquirectangularReflectionMapping;
+}
+
+export function getEnvironmentMap(): THREE.Texture | null {
+  return environmentMap;
+}

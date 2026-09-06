@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { LoadedModel } from './sceneLoader';
 import compositeVertex from './shader/composite-shader/vertex.glsl?raw';
 import compositeFragment from './shader/composite-shader/fragment.glsl?raw';
 import backgroundVertex from './shader/noise-shader/background.vert.glsl?raw';
 import backgroundFragment from './shader/noise-shader/background.frag.glsl?raw';
+import pbrBackgroundVertex from './shader/pbr-shader/background.vert.glsl?raw';
+import pbrBackgroundFragment from './shader/pbr-shader/background.frag.glsl?raw';
+import { getEnvironmentMap } from './environmentMap';
 
 
 export class RenderPipeline {
@@ -17,6 +19,7 @@ export class RenderPipeline {
   private readonly blitCamera: THREE.OrthographicCamera;
   private readonly blitMaterial: THREE.ShaderMaterial;
 
+  private readonly pbrBgMaterial: THREE.ShaderMaterial;
   private currentModel: LoadedModel | null = null;
 
   private noiseRenderTarget: THREE.WebGLRenderTarget | undefined;
@@ -46,12 +49,20 @@ export class RenderPipeline {
     this.noiseScene.add(bgMesh);
 
     this.pbrScene = new THREE.Scene();
-    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-    const environmentTexture = pmremGenerator.fromScene(new RoomEnvironment()).texture;
-    this.pbrScene.environment = environmentTexture;
-    this.pbrScene.background = environmentTexture;
-    this.pbrScene.backgroundBlurriness = 0.5;
-    pmremGenerator.dispose();
+    this.pbrBgMaterial = new THREE.ShaderMaterial({
+      depthWrite: false,
+      vertexShader: pbrBackgroundVertex,
+      fragmentShader: pbrBackgroundFragment,
+      uniforms: {
+        envMap:        { value: getEnvironmentMap() },
+        cameraFov:    { value: THREE.MathUtils.degToRad(60) },
+        cameraAspect: { value: window.innerWidth / window.innerHeight },
+      },
+    });
+    const pbrBgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.pbrBgMaterial);
+    pbrBgMesh.renderOrder = -1;
+    pbrBgMesh.frustumCulled = false;
+    this.pbrScene.add(pbrBgMesh);
 
     this.blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.blitScene = new THREE.Scene();
@@ -120,6 +131,7 @@ export class RenderPipeline {
 
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this.pbrBgMaterial.uniforms.cameraAspect.value = width / height;
   }
 
   get memoryInfo() { return this.renderer.info.memory; }

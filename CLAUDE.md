@@ -18,33 +18,43 @@ npm start              # dev server at http://localhost:5173
 
 ## Architecture
 
-**Pipeline:** webcam → MediaPipe FaceLandmarker → viewer world position → ModeController (mode system) → Three.js scene (rotation + camera) + dual render targets (noise shader + PBR shader) → blit shader (blend formula)
+**Pipeline:** webcam → MediaPipe FaceLandmarker → viewer world position → ModeController (mode system) → Three.js scene (rotation + camera) + dual render targets (noise shader + PBR shader) → composite shader (blend formula)
 
 ### Files
 
 | File | Purpose |
 |---|---|
 | [index.html](index.html) | Canvas, hidden video, resolution slider, mute button |
-| [main.ts](main.ts) | Init, render loop, debug mode (`d` = toggle, `n` = next model) |
-| [viewer.ts](viewer.ts) | Viewer tracking: `calculateViewer`, setup functions, viewer state |
-| [geometry.ts](geometry.ts) | `addTriangleAttribs`, `buildMesh` — noise shader geometry preprocessing |
-| [frameState.ts](frameState.ts) | Types: `ViewerState`, `SceneState`, `FrameState` |
-| [mode.ts](mode.ts) | Abstract `AnimationMode` base class |
-| [modeGaming.ts](modeGaming.ts) | Interactive phase — head movement rotates object, angle drives blend |
-| [modeCompletion.ts](modeCompletion.ts) | Completion sequence — auto-rotation to upright + facing camera, saturation reveal |
-| [modeCaptureHold.ts](modeCaptureHold.ts) | Holds frozen capture while next model loads; minimum hold via `minDuration` |
-| [modeTransition.ts](modeTransition.ts) | Fades frozen capture back to noise |
-| [modeController.ts](modeController.ts) | Orchestrates modes, applies `FrameState` to scene, manages game loop |
-| [renderPipeline.ts](renderPipeline.ts) | Three.js rendering: scenes, render targets, blit shader |
-| [sceneLoader.ts](sceneLoader.ts) | Lazy GLB loading: fetches shaders, builds `LoadedModel` pairs, `getNext()` / `dispose()` |
-| [sceneConfig.ts](sceneConfig.ts) | Per-GLB scale multiplier and rotation overrides |
-| [audio.ts](audio.ts) | Audio setup: noise player + drum player |
-| [audioPlayer.ts](audioPlayer.ts) | `AudioPlayer` — loads and plays an audio buffer with gain control |
-| [noise.mp3](noise.mp3) | Looped noise sound, gain driven by rotation speed |
-| [drumHit.mp3](drumHit.mp3) | One-shot beat sound, fired on each beat in game phase |
-| [export-shader/vertex.glsl](export-shader/vertex.glsl) | Vertex shader — passes triangle attributes |
-| [export-shader/fragment.glsl](export-shader/fragment.glsl) | Anisotropic noise fragment shader |
-| [export-shader/setup.md](export-shader/setup.md) | Shader integration guide |
+| [src/main.ts](src/main.ts) | Init, render loop, debug mode (`d` = toggle, `n` = next model) |
+| [src/viewer.ts](src/viewer.ts) | Viewer tracking: `calculateViewer`, setup functions, viewer state |
+| [src/environmentMap.ts](src/environmentMap.ts) | Loads EXR equirectangular env map via `EXRLoader`; `getEnvironmentMap()` returns the texture |
+| [src/renderPipeline.ts](src/renderPipeline.ts) | Three.js rendering: scenes, render targets, composite shader |
+| [src/sceneLoader.ts](src/sceneLoader.ts) | Lazy GLB loading: builds `LoadedModel` pairs, `getNext()` / `dispose()` |
+| [src/sceneConfig.ts](src/sceneConfig.ts) | Per-GLB scale multiplier and rotation overrides |
+| [src/meshBuilder/noiseMeshBuilder.ts](src/meshBuilder/noiseMeshBuilder.ts) | `addTriangleAttribs`, `buildMesh` — noise shader geometry preprocessing |
+| [src/meshBuilder/pbrMeshBuilder.ts](src/meshBuilder/pbrMeshBuilder.ts) | `buildPbrMesh` — extracts GLB material textures, builds custom PBR `ShaderMaterial` |
+| [src/modes/animationMode.ts](src/modes/animationMode.ts) | Abstract `AnimationMode` base class |
+| [src/modes/frameState.ts](src/modes/frameState.ts) | Types: `ViewerState`, `SceneState`, `FrameState` |
+| [src/modes/gamingMode.ts](src/modes/gamingMode.ts) | Interactive phase — head movement rotates object, angle drives blend |
+| [src/modes/completionMode.ts](src/modes/completionMode.ts) | Completion sequence — auto-rotation to upright + facing camera, saturation reveal |
+| [src/modes/captureHoldMode.ts](src/modes/captureHoldMode.ts) | Holds frozen capture while next model loads; minimum hold via `minDuration` |
+| [src/modes/transitionMode.ts](src/modes/transitionMode.ts) | Fades frozen capture back to noise |
+| [src/modes/modeController.ts](src/modes/modeController.ts) | Orchestrates modes, applies `FrameState` to scene, manages game loop |
+| [src/audioEngine/audio.ts](src/audioEngine/audio.ts) | Audio setup: noise player + drum player |
+| [src/audioEngine/audioPlayer.ts](src/audioEngine/audioPlayer.ts) | `AudioPlayer` — loads and plays an audio buffer with gain control |
+| [audio/noise.mp3](audio/noise.mp3) | Looped noise sound, gain driven by rotation speed |
+| [audio/drumHit.mp3](audio/drumHit.mp3) | One-shot beat sound, fired on each beat in game phase |
+| [src/shader/noise-shader/vertex.glsl](src/shader/noise-shader/vertex.glsl) | Noise vertex shader — passes triangle attributes |
+| [src/shader/noise-shader/fragment.glsl](src/shader/noise-shader/fragment.glsl) | Anisotropic noise fragment shader |
+| [src/shader/noise-shader/background.vert.glsl](src/shader/noise-shader/background.vert.glsl) | Fullscreen quad vertex shader for noise background |
+| [src/shader/noise-shader/background.frag.glsl](src/shader/noise-shader/background.frag.glsl) | Noise background fragment shader |
+| [src/shader/pbr-shader/vertex.glsl](src/shader/pbr-shader/vertex.glsl) | PBR vertex shader — outputs world position, normal, tangent, bitangent |
+| [src/shader/pbr-shader/fragment.glsl](src/shader/pbr-shader/fragment.glsl) | Cook-Torrance BRDF: GGX/Smith/Schlick + equirectangular env specular |
+| [src/shader/pbr-shader/background.vert.glsl](src/shader/pbr-shader/background.vert.glsl) | Fullscreen quad vertex shader for PBR background |
+| [src/shader/pbr-shader/background.frag.glsl](src/shader/pbr-shader/background.frag.glsl) | PBR background — reconstructs view ray from NDC, samples EXR env map |
+| [src/shader/composite-shader/vertex.glsl](src/shader/composite-shader/vertex.glsl) | Composite blit vertex shader |
+| [src/shader/composite-shader/fragment.glsl](src/shader/composite-shader/fragment.glsl) | 3-step blend: grayscale→color, live→capture, noise→PBR |
+| [environmentMap/environmentMap.exr](environmentMap/environmentMap.exr) | EXR equirectangular environment map |
 | [models/face_landmarker.task](models/face_landmarker.task) | MediaPipe model (not in git, run `download_model.sh`) |
 
 ### Coordinate system (world space)
@@ -95,25 +105,39 @@ MediaPipe provides the face transform matrix in camera space. `calculateViewer` 
 
 Exports: `viewerPosition`, `viewerForward`, `viewerUp`, `viewerDistance`, `faceDetected` (all live bindings).
 
-### Noise shader (`export-shader/`)
+### Noise shader (`src/shader/noise-shader/`)
 
-Anisotropic noise shader — procedural white noise bound to triangle geometry. Uses a Jacobian/ellipse approach to maintain statistical uniformity at all viewing angles and distances (see `export-shader/setup.md` for full details).
+Anisotropic noise shader — procedural white noise bound to triangle geometry. Uses a Jacobian/ellipse approach to maintain statistical uniformity at all viewing angles and distances (see [noiseShader.md](noiseShader.md) for full details).
 
-`geometry.ts` preprocesses every geometry before use: converts to non-indexed, bakes per-triangle barycentric coordinates and edge lengths as vertex attributes (`aBary`, `aEdgeLenAB`, `aEdgeLenAC`, `aTriSeed`). World scale is applied in the vertex shader via `length(modelMatrix[0].xyz)`.
+`noiseMeshBuilder.ts` preprocesses every geometry before use: converts to non-indexed, bakes per-triangle barycentric coordinates and edge lengths as vertex attributes (`aBary`, `aEdgeLenAB`, `aEdgeLenAC`, `aTriSeed`). World scale is applied in the vertex shader via `length(modelMatrix[0].xyz)`.
 
 Use `THREE.ShaderMaterial` (not `RawShaderMaterial`) — Three.js injects built-in uniforms and GLSL1 compat macros.
 
-### Render pipeline (`renderPipeline.ts`)
+### PBR shader (`src/shader/pbr-shader/`)
 
-Two render targets (noise + PBR) plus a capture target, all at scaled resolution (res slider). Blitted to the full canvas via an orthographic camera and a custom blit shader:
+Custom Cook-Torrance BRDF with GGX distribution, Smith geometry, and Schlick Fresnel. Built in `pbrMeshBuilder.ts` as a `THREE.ShaderMaterial`.
+
+**Lighting:** one point light (`lightPosition`, `lightIntensity` uniforms in `pbrMeshBuilder.ts`) plus specular-only IBL from the EXR env map sampled at the reflection direction. Ambient is a flat constant `0.03 * albedo`.
+
+**Tangent handling:** Three.js does NOT inject `attribute vec4 tangent` for `ShaderMaterial` (only for built-in materials). It is declared explicitly in `vertex.glsl` and bound by name from `geometry.attributes.tangent`. `pbrMeshBuilder.ts` ensures tangents always exist: calls `geometry.computeTangents()` if the geometry is indexed with UVs, otherwise falls back to a dummy `(1,0,0,1)` attribute (disables normal mapping for that mesh).
+
+**Normal mapping:** TBN matrix constructed in the fragment shader from three separate `varying vec3` (tangent, bitangent, world normal). `varying mat3` is avoided — it has GLSL1 compatibility issues in Three.js.
+
+**Background:** `background.frag.glsl` reconstructs a view-space ray from NDC coordinates and camera FOV, rotates it to world space via the inverse of the view matrix rotation, then samples the EXR env map with `equirectUv(dir)`.
+
+**Environment map:** loaded once in `environmentMap.ts` via Three.js `EXRLoader` with `EquirectangularReflectionMapping`. Passed as a `sampler2D` uniform to both the PBR mesh shader and the background shader.
+
+### Render pipeline (`src/renderPipeline.ts`)
+
+Two render targets (noise + PBR) plus a capture target, all at scaled resolution (res slider). Composited to the full canvas via an orthographic camera and a custom composite shader:
 
 ```
-noiseRenderTarget    →  blit shader  →  screen
+noiseRenderTarget    →  composite shader  →  screen
 pbrRenderTarget      ↗
 pbrCaptureTarget     ↗
 ```
 
-Blit shader 3-step blend chain:
+Composite shader 3-step blend chain (`src/shader/composite-shader/fragment.glsl`):
 
 ```glsl
 // Step 1: color or grayscale PBR
@@ -129,7 +153,7 @@ finalColor = mix(noise, pbrOrCapture, grayscalePbrNoiseBlend)  // 0 = noise, 1 =
 
 `NearestFilter` on render targets preserves per-pixel noise shader correctness.
 
-`takeCapture()` renders the blit scene to `pbrCaptureTarget` (freezing the current output). Called when `modeCompletion` signals `startCaptureHoldMode`, before the new model is swapped in.
+`takeCapture()` renders the composite scene to `pbrCaptureTarget` (freezing the current output). Called when `completionMode` signals `startCaptureHoldMode`, before the new model is swapped in.
 
 ### Frame data flow
 
@@ -150,7 +174,7 @@ interface FrameState {
 
 `ModeController.update()` builds `ViewerState` and `SceneState`, calls `currentMode.computeFrame()`, handles `modeChange` transitions, applies the result to the Three.js camera and anchor, fires audio events, and calls `renderPipeline.setBlends()`.
 
-### ModeController (`modeController.ts`)
+### ModeController (`src/modes/modeController.ts`)
 
 - Owns mode instances and transitions between them
 - Computes `speedFactor` (head movement speed, clamped [0,1]) and injects it into `ViewerState`
@@ -165,9 +189,9 @@ interface FrameState {
 
 Each mode file defines its own `interpolationCurve(t: number): number` at the top — the single place to tune the visual feel of that phase.
 
-- **`modeGaming`** — `interpolationCurve` called via `blendFromAngle(angleDeg)`: `interpolationCurve(angleDeg / 180)` → `grayscalePbrNoiseBlend`
-- **`modeCompletion`** — `interpolationCurve(elapsed / activeDuration)` drives rotation slerp, camera X lerp, `pbrColorBlend`, and noise gain in lockstep
-- **`modeTransition`** — `interpolationCurve(elapsed / duration)` drives `grayscalePbrNoiseBlend` from 1→0 (fade to noise) while `captureBlend = 1`
+- **`gamingMode`** — `interpolationCurve` called via `blendFromAngle(angleDeg)`: `interpolationCurve(angleDeg / 180)` → `grayscalePbrNoiseBlend`
+- **`completionMode`** — `interpolationCurve(elapsed / activeDuration)` drives rotation slerp, camera X lerp, `pbrColorBlend`, and noise gain in lockstep
+- **`transitionMode`** — `interpolationCurve(elapsed / duration)` drives `grayscalePbrNoiseBlend` from 1→0 (fade to noise) while `captureBlend = 1`
 
 ### Audio (`audio.ts`, `audioPlayer.ts`)
 

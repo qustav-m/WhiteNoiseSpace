@@ -5,6 +5,7 @@ import { ModeController } from './modes/modeController';
 import { RenderPipeline } from './renderPipeline';
 import { SceneLoader } from './sceneLoader';
 import { initAudio } from './audioEngine/audio';
+import { initEnvironmentMap } from './environmentMap';
 
 const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
@@ -59,17 +60,20 @@ async function init(): Promise<void> {
   });
   setUpDefault();
 
-  status.textContent = 'Loading audio…';
-  const { noisePlayer, drumPlayer } = await initAudio();
+  status.textContent = 'Loading audio and environment…';
+  const [{ noisePlayer, drumPlayer }] = await Promise.all([
+    initAudio(),
+    initEnvironmentMap(),
+  ]);
   modeController = new ModeController();
   modeController.setAudioPlayers(noisePlayer, drumPlayer);
+
+  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+  renderPipeline = new RenderPipeline(canvas);
 
   status.textContent = 'Loading models…';
   sceneLoader = new SceneLoader();
   await sceneLoader.firstReady;
-
-  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  renderPipeline = new RenderPipeline(canvas);
   renderPipeline.setResolution(resolutionScale);
   modeController.initialize(renderPipeline, sceneLoader);
 

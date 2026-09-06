@@ -10,7 +10,9 @@ bash download_model.sh   # downloads face detection model (~8MB, one-time)
 npm start                # dev server at http://localhost:5173
 ```
 
-> **3D models are not included in this repository.** Add GLB files to a `scenes/` folder (not part of the repo) in the project root — they will be picked up automatically. Per-model scale and rotation can be configured in `sceneConfig.ts`.
+**Environment map** — not included (67 MB). Place an equirectangular EXR as `environmentMap/environmentMap.exr`. Any HDR from [Poly Haven](https://polyhaven.com/hdris) works; download as EXR at any resolution.
+
+> **3D models are not included in this repository.** Add GLB files to a `scenes/` folder in the project root — they will be picked up automatically. Per-model scale and rotation can be configured in `src/sceneConfig.ts`.
 
 Open [http://localhost:5173](http://localhost:5173) in a browser with webcam access.
 
@@ -30,7 +32,7 @@ const overrides: Record<string, SceneOverride> = {
 };
 ```
 
-**Webcam setup preset** — called in `main.ts`:
+**Webcam setup preset** — called in `src/main.ts`:
 ```ts
 setUpDefault(); // MacBook Pro 14" M3, webcam at top center of screen
 // setUpHome(); // external monitor, offset webcam
@@ -49,24 +51,28 @@ setUpDefault(); // MacBook Pro 14" M3, webcam at top center of screen
 
 ```
 webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderPipeline → screen
-                                                               ↘ audio.ts
+                                                               ↘ audioEngine/audio.ts
 ```
 
 | File | Purpose |
 |---|---|
-| `main.ts` | Init, render loop, debug mode |
-| `viewer.ts` | Face tracking → world-space viewer position |
-| `modeController.ts` | Mode orchestration, game loop, audio triggering |
-| `renderPipeline.ts` | Three.js scenes, render targets, blit shader |
-| `sceneLoader.ts` | Lazy GLB loading — one model preloaded at a time |
-| `modeGaming.ts` | Interactive rotation phase |
-| `modeCompletion.ts` | Color reveal sequence |
-| `modeCaptureHold.ts` | Holds frozen capture while next model loads |
-| `modeTransition.ts` | Frozen capture fade to noise |
-| `sceneConfig.ts` | Per-GLB scale and rotation overrides |
-| `geometry.ts` | Noise shader geometry preprocessing |
-| `audio.ts` / `audioPlayer.ts` | Web Audio playback |
-| `export-shader/` | Anisotropic noise GLSL shader |
+| `src/main.ts` | Init, render loop, debug mode |
+| `src/viewer.ts` | Face tracking → world-space viewer position |
+| `src/modes/modeController.ts` | Mode orchestration, game loop, audio triggering |
+| `src/renderPipeline.ts` | Three.js scenes, render targets, composite shader |
+| `src/sceneLoader.ts` | Lazy GLB loading — one model preloaded at a time |
+| `src/modes/gamingMode.ts` | Interactive rotation phase |
+| `src/modes/completionMode.ts` | Color reveal sequence |
+| `src/modes/captureHoldMode.ts` | Holds frozen capture while next model loads |
+| `src/modes/transitionMode.ts` | Frozen capture fade to noise |
+| `src/sceneConfig.ts` | Per-GLB scale and rotation overrides |
+| `src/environmentMap.ts` | Loads EXR env map for PBR background + specular |
+| `src/meshBuilder/noiseMeshBuilder.ts` | Noise shader geometry preprocessing |
+| `src/meshBuilder/pbrMeshBuilder.ts` | Custom Cook-Torrance PBR shader material |
+| `src/audioEngine/` | Web Audio playback |
+| `src/shader/noise-shader/` | Anisotropic noise GLSL shader |
+| `src/shader/pbr-shader/` | PBR GLSL shader + env map background |
+| `src/shader/composite-shader/` | Blend: noise ↔ grayscale PBR ↔ full-color PBR |
 
 ## Tech
 
@@ -74,5 +80,6 @@ webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderP
 - [MediaPipe FaceLandmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) — real-time face tracking
 - [Vite](https://vite.dev) — dev server and bundler
 - TypeScript
-- Custom anisotropic noise GLSL shader (see `export-shader/setup.md`)
+- Custom anisotropic noise GLSL shader (see `noiseShader.md`)
+- Custom Cook-Torrance PBR GLSL shader with equirectangular EXR env map
 - Web Audio API — looped noise + beat-synced drum
