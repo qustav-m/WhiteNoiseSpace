@@ -6,7 +6,7 @@ export class GamingMode extends AnimationMode {
   private static readonly completionThresholdDeg: number = 10;
 
   private static interpolationCurve(t: number): number {
-    return t**32;
+    return t**16;
   }
 
   private static blendFromAngle(angleDeg: number): number {

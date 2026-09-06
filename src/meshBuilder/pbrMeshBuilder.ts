@@ -38,7 +38,7 @@ export function buildPbrMesh(
       normalScale:     { value: std.normalScale?.x ?? 1.0 },
 
       lightPosition:  { value: new THREE.Vector3(-1, 100, 100) },
-      lightIntensity: { value: 300.0 },
+      lightIntensity: { value: 10.0 },
 
       hasBaseColorMap:         { value: !!std.map },
       hasNormalMap:            { value: canNormalMap },
