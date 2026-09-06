@@ -79,8 +79,7 @@ void main() {
 
   vec3 L = normalize(lightPosition - vWorldPosition);
   vec3 H = normalize(V + L);
-  float dist = length(lightPosition - vWorldPosition);
-  vec3 Li = vec3(lightIntensity) / (dist * dist);
+  vec3 Li = vec3(lightIntensity);
 
   float D = distributionGGX(N, H, roughness);
   float G = geometrySmith(N, V, L, roughness);
