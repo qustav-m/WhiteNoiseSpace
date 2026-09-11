@@ -19,6 +19,16 @@ let sceneLoader!: SceneLoader;
 let debugMode: boolean = false;
 let uiHidden: boolean = false;
 
+function makeResolutionInputs(widthId: string, heightId: string, apply: (w: number, h: number) => void): void {
+  const widthInput = document.getElementById(widthId) as HTMLInputElement;
+  const heightInput = document.getElementById(heightId) as HTMLInputElement;
+  widthInput.value = String(window.innerWidth);
+  heightInput.value = String(window.innerHeight);
+  const onChange = () => apply(parseInt(widthInput.value) || window.innerWidth, parseInt(heightInput.value) || window.innerHeight);
+  widthInput.addEventListener('change', onChange);
+  heightInput.addEventListener('change', onChange);
+}
+
 function hideUi(hidden: boolean): void {
   uiHidden = hidden;
   const ui = document.getElementById('ui')!;
@@ -91,17 +101,17 @@ async function init(): Promise<void> {
     modeController.setBPM(bpm);
   });
 
-  const widthInput = document.getElementById('input-width') as HTMLInputElement;
-  const heightInput = document.getElementById('input-height') as HTMLInputElement;
-  widthInput.value = String(window.innerWidth);
-  heightInput.value = String(window.innerHeight);
-  const applyResolutionFromInputs = () => {
-    const width = parseInt(widthInput.value) || window.innerWidth;
-    const height = parseInt(heightInput.value) || window.innerHeight;
-    renderPipeline.setResolutionPixels(width, height);
-  };
-  widthInput.addEventListener('change', applyResolutionFromInputs);
-  heightInput.addEventListener('change', applyResolutionFromInputs);
+  makeResolutionInputs('input-noise-w', 'input-noise-h', (w, h) => renderPipeline.setNoiseResolution(w, h));
+  makeResolutionInputs('input-pbr-w', 'input-pbr-h', (w, h) => renderPipeline.setPbrResolution(w, h));
+  makeResolutionInputs('input-grid-w', 'input-grid-h', (w, h) => renderPipeline.setCompositeGridResolution(w, h));
+
+  document.getElementById('btn-copy-noise-to-grid')!.addEventListener('click', () => {
+    const gridW = document.getElementById('input-grid-w') as HTMLInputElement;
+    const gridH = document.getElementById('input-grid-h') as HTMLInputElement;
+    gridW.value = (document.getElementById('input-noise-w') as HTMLInputElement).value;
+    gridH.value = (document.getElementById('input-noise-h') as HTMLInputElement).value;
+    gridW.dispatchEvent(new Event('change'));
+  });
 
   const muteButton = document.getElementById('btn-mute') as HTMLButtonElement;
   muteButton.addEventListener('click', () => {
@@ -110,9 +120,6 @@ async function init(): Promise<void> {
     muteButton.textContent = muted ? 'unmute' : 'mute';
   });
 
-  const modeButton = document.getElementById('btn-mode') as HTMLButtonElement;
-  modeButton.textContent = 'restart';
-  modeButton.addEventListener('click', () => modeController.initialize(renderPipeline, sceneLoader));
 
   document.addEventListener('keydown', e => {
     if (e.key === 'd') {

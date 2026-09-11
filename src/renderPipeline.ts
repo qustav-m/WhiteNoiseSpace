@@ -106,26 +106,29 @@ export class RenderPipeline {
     return this.currentModel?.noiseObject.quaternion.clone() ?? new THREE.Quaternion();
   }
 
-  setResolutionPixels(width: number, height: number): void {
-    this.applyResolution(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
-  }
-
   setResolution(scale: number): void {
-    this.applyResolution(
-      Math.max(1, Math.round(window.innerWidth * scale)),
-      Math.max(1, Math.round(window.innerHeight * scale)),
-    );
+    const width = Math.max(1, Math.round(window.innerWidth * scale));
+    const height = Math.max(1, Math.round(window.innerHeight * scale));
+    this.setNoiseResolution(width, height);
+    this.setPbrResolution(width, height);
   }
 
-  private applyResolution(width: number, height: number): void {
+  setNoiseResolution(width: number, height: number): void {
+    width = Math.max(1, Math.round(width));
+    height = Math.max(1, Math.round(height));
     this.noiseRenderTarget?.dispose();
-    this.pbrRenderTarget?.dispose();
-    this.pbrCaptureTarget?.dispose();
-
     this.noiseRenderTarget = new THREE.WebGLRenderTarget(width, height, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
     });
+    this.blitMaterial.uniforms.noiseTexture.value = this.noiseRenderTarget.texture;
+  }
+
+  setPbrResolution(width: number, height: number): void {
+    width = Math.max(1, Math.round(width));
+    height = Math.max(1, Math.round(height));
+    this.pbrRenderTarget?.dispose();
+    this.pbrCaptureTarget?.dispose();
     this.pbrRenderTarget = new THREE.WebGLRenderTarget(width, height, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
@@ -135,15 +138,17 @@ export class RenderPipeline {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
     });
-
-    this.blitMaterial.uniforms.noiseTexture.value = this.noiseRenderTarget.texture;
     this.blitMaterial.uniforms.captureTexture.value = this.pbrCaptureTarget.texture;
-
-    this.blitMaterial.uniforms.resolution.value.set(width, height);
-
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.pbrBgMaterial.uniforms.cameraAspect.value = width / height;
+  }
+
+  setCompositeGridResolution(width: number, height: number): void {
+    this.blitMaterial.uniforms.resolution.value.set(
+      Math.max(1, Math.round(width)),
+      Math.max(1, Math.round(height)),
+    );
   }
 
   get memoryInfo() { return this.renderer.info.memory; }

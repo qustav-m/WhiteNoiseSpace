@@ -40,13 +40,16 @@ setUpDefault(); // MacBook Pro 14" M3, webcam at top center of screen
 
 ## UI controls
 
-- **res slider** — scales render resolution (lower = more pixelated, faster)
-- **BPM slider** — sets beat timing for head movement gating
+UI lives in a black panel on the right side of the screen. Press `i` to hide/show it.
+
 - **mute button** — silences all audio
-- **restart button** — restarts the game loop from the first object
+- **BPM slider** — sets beat timing for head movement gating
+- **noise w/h** — render target pixel dimensions for the noise shader
+- **pbr w/h** — render target pixel dimensions for the PBR shader
+- **grid w/h** — stochastic composite grid size (cells that flip together); copy noise → grid button syncs them
 - **`d` key** — toggle debug mode (shows objects in PBR at identity rotation, no noise)
 - **`n` key** — cycle to next model (debug mode only)
-- **`i` key** — toggle UI visibility (hides all controls and status messages)
+- **`i` key** — toggle UI panel visibility
 
 ## Architecture
 
@@ -73,7 +76,7 @@ webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderP
 | `src/audioEngine/` | Web Audio playback |
 | `src/shader/noise-shader/` | Anisotropic noise GLSL shader |
 | `src/shader/pbr-shader/` | PBR GLSL shader + env map background |
-| `src/shader/composite-shader/` | Blend: noise ↔ grayscale PBR ↔ full-color PBR |
+| `src/shader/composite-shader/` | Stochastic blend: noise ↔ grayscale PBR ↔ full-color PBR, quantized to grid |
 
 ## Tech
 

@@ -24,7 +24,7 @@ npm start              # dev server at http://localhost:5173
 
 | File | Purpose |
 |---|---|
-| [index.html](index.html) | Canvas, hidden video, resolution slider, mute button |
+| [index.html](index.html) | Canvas, hidden video, mute button, BPM slider, resolution inputs, black UI panel |
 | [src/main.ts](src/main.ts) | Init, render loop, debug mode (`d` = toggle, `n` = next model) |
 | [src/viewer.ts](src/viewer.ts) | Viewer tracking: `calculateViewer`, setup functions, viewer state |
 | [src/environmentMap.ts](src/environmentMap.ts) | Loads EXR equirectangular env map via `EXRLoader`; `getEnvironmentMap()` returns the texture |
@@ -129,7 +129,7 @@ Custom Cook-Torrance BRDF with GGX distribution, Smith geometry, and Schlick Fre
 
 ### Render pipeline (`src/renderPipeline.ts`)
 
-Two render targets (noise + PBR) plus a capture target, all at scaled resolution (res slider). Composited to the full canvas via an orthographic camera and a custom composite shader:
+Two render targets (noise + PBR, each independently sized) plus a capture target. Composited to the full canvas via an orthographic camera and a custom composite shader. Resolution controlled via three pairs of UI inputs: noise render target, PBR render target, and composite grid (see below).
 
 ```
 noiseRenderTarget    →  composite shader  →  screen
@@ -147,12 +147,13 @@ pbrWithColor = mix(vec3(pbrValue), pbr, pbrColorBlend)   // 0 = grayscale, 1 = f
 // Step 2: live PBR or frozen capture
 pbrOrCapture = mix(pbrWithColor, capture, captureBlend)  // 0 = live, 1 = frozen
 
-// Step 3: stochastic threshold — per-fragment random value changes each frame
-rand = hash(vUv + fract(time))
+// Step 3: stochastic threshold — per-fragment random value, quantized to grid
+pixelUv = floor(vUv * resolution) / resolution
+rand = hash(pixelUv + fract(time))
 finalColor = grayscalePbrNoiseBlend > rand ? pbrOrCapture : noise
 ```
 
-`time` increments by `0.01` each frame in `render()` — controls flicker speed. `hash()` is a sin-based 2D hash giving a statistically independent value per fragment. The stochastic threshold means the transition between noise and PBR appears as per-pixel flickering rather than a smooth dissolve.
+`time` increments by `0.01` each frame in `render()` — controls flicker speed. `hash()` is a sin-based 2D hash. `resolution` is a `vec2` uniform set by `setCompositeGridResolution(w, h)` — UVs are quantized to a `w×h` grid so whole cells flip together, giving a blocky pixel-art dissolve effect independent of the render target size. The composite itself always runs at full screen resolution.
 
 `NearestFilter` on render targets preserves per-pixel noise shader correctness.
 
@@ -186,7 +187,7 @@ interface FrameState {
 - On `startTransitionMode`: only acts when `sceneLoader.isNextReady` — creates `TransitionMode`
 - On `startGamingMode`: creates a new `GamingMode`
 - `switchToNextScene()`: calls `sceneLoader.getNext()` → `renderPipeline.switchToModel()` → `sceneLoader.dispose(removedModel)` → applies random start rotation
-- `initialize(renderPipeline, sceneLoader)` sets up the first scene and gaming mode; also called by the restart button
+- `initialize(renderPipeline, sceneLoader)` sets up the first scene and gaming mode
 
 ### Interpolation functions
 
