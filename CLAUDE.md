@@ -68,9 +68,9 @@ Screen fixed at origin, screen normal = +x
 
 ### Game loop
 
-1. **Gaming phase (`modeGaming`)** — object starts at a random rotation where local up is far from world up. Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed.
+1. **Gaming phase (`gamingMode`)** — object starts at a random rotation where local up is far from world up (60°–120° from upright). Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed. Completion triggers when the angle stays below `acceptanceAngle` (10°) continuously for `acceptanceDuration` (500ms).
 
-2. **Completion phase (`modeCompletion`)** — triggers when the angle between local up and world up falls below `completionThresholdDeg` (default 10°). The object auto-rotates toward upright (identity quaternion) + camera-facing, camera animates to `targetCameraX`, saturation fades in over `activeDuration` ms.
+2. **Completion phase (`completionMode`)** — object auto-rotates toward upright (identity quaternion) + camera-facing, camera lerps to `targetCameraX` (0.5), saturation fades in over `activeDuration` (3000ms).
 
 3. **Capture hold phase (`modeCaptureHold`)** — immediately after completion: takes a frozen capture of the full-color reveal, swaps in the next model (hidden behind the capture), and waits until the model after that is fully preloaded. Holds for at least `minDuration` ms.
 
@@ -193,9 +193,9 @@ interface FrameState {
 
 Each mode file defines its own `interpolationCurve(t: number): number` at the top — the single place to tune the visual feel of that phase.
 
-- **`gamingMode`** — `interpolationCurve` called via `blendFromAngle(angleDeg)`: `interpolationCurve(angleDeg / 180)` → `grayscalePbrNoiseBlend`
-- **`completionMode`** — `interpolationCurve(elapsed / activeDuration)` drives rotation slerp, camera X lerp, `pbrColorBlend`, and noise gain in lockstep
-- **`transitionMode`** — `interpolationCurve(elapsed / duration)` drives `grayscalePbrNoiseBlend` from 1→0 (fade to noise) while `captureBlend = 1`
+- **`gamingMode`** — `interpolationCurve(t) = t**16` called via `blendFromAngle(angleDeg)`: normalizes angle to [0,1] over range `[acceptanceAngle, 180°]` then applies curve → `grayscalePbrNoiseBlend`
+- **`completionMode`** — `interpolationCurve(t) = min(t*2, 1)` drives rotation slerp, camera X lerp, `pbrColorBlend`, and noise gain in lockstep
+- **`transitionMode`** — `interpolationCurve(t) = 1 - t` drives `grayscalePbrNoiseBlend` from 1→0 (fade to noise) while `captureBlend = 1`
 
 ### Audio (`audio.ts`, `audioPlayer.ts`)
 

@@ -8,7 +8,7 @@ function interpolationCurve(t: number): number {
 
 const targetRotation: THREE.Quaternion = new THREE.Quaternion(); // identity = upright, facing camera
 
-const targetCameraX: number = 2.0;
+const targetCameraX: number = 0.5;
 const noiseGainScale: number = 500; // radians/ms → gain [0, 1]
 
 export class CompletionMode extends AnimationMode {

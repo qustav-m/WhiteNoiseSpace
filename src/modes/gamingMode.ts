@@ -3,14 +3,15 @@ import { AnimationMode } from './animationMode';
 import { ViewerState, SceneState, FrameState } from './frameState';
 
 export class GamingMode extends AnimationMode {
-  private static readonly completionThresholdDeg: number = 10;
+  private static readonly acceptanceAngle: number = 10;//Degree
+  private static readonly acceptanceDuration: number = 500;//ms
 
   private static interpolationCurve(t: number): number {
     return t**16;
   }
 
   private static blendFromAngle(angleDeg: number): number {
-    let t = (angleDeg - GamingMode.completionThresholdDeg) / (180 - GamingMode.completionThresholdDeg);
+    let t = (angleDeg - GamingMode.acceptanceAngle) / (180 - GamingMode.acceptanceAngle);
     t = 1 - THREE.MathUtils.clamp(t, 0, 1);
     return GamingMode.interpolationCurve(t);
   }
@@ -19,12 +20,13 @@ export class GamingMode extends AnimationMode {
   private readonly rotationScale: number = 0.15;
   private readonly cmPerUnit: number = 10.0;
   private readonly minCameraX: number = 0.0;
-  private readonly maxCameraX: number = 10.0;
+  private readonly maxCameraX: number = 1.5;
 
   private beatInterval: number = 60000 / 30;
   private lastBeatTime: number = -1;
   private viewerPositionLastFrame: THREE.Vector3 | null = null;
   private viewerDistanceLastFrame: number | null = null;
+  private withinAcceptanceAngleSince: number | null = null;
 
   setBPM(bpm: number): void {
     this.beatInterval = 60000 / bpm;
@@ -81,13 +83,25 @@ export class GamingMode extends AnimationMode {
     return { rotation: sceneState.rotation, cameraX };
   }
 
-  private blendStateFromRotation(rotation: THREE.Quaternion): { grayscalePbrNoiseBlend: number; modeChange: 'startCompletionMode' | null } {
+  private blendStateFromRotation(rotation: THREE.Quaternion, now: number): { grayscalePbrNoiseBlend: number; modeChange: 'startCompletionMode' | null } {
     const worldUp = new THREE.Vector3(0, 1, 0);
     const objectUp = worldUp.clone().applyQuaternion(rotation);
     const angleDeg: number = THREE.MathUtils.RAD2DEG * Math.acos(THREE.MathUtils.clamp(objectUp.dot(worldUp), -1, 1));
+    const withinAcceptance: boolean = angleDeg < GamingMode.acceptanceAngle;
+    let acceptanceDurationMet: boolean = false;
+    if (withinAcceptance) {
+      if (this.withinAcceptanceAngleSince === null) {
+        this.withinAcceptanceAngleSince = now;
+      }
+      const timeWithinAcceptanceAngle: number = now - this.withinAcceptanceAngleSince;
+      acceptanceDurationMet = timeWithinAcceptanceAngle >= GamingMode.acceptanceDuration;
+    } else {
+      this.withinAcceptanceAngleSince = null;
+    }
+  
     return {
       grayscalePbrNoiseBlend: GamingMode.blendFromAngle(angleDeg),
-      modeChange: angleDeg < GamingMode.completionThresholdDeg ? 'startCompletionMode' : null,
+      modeChange: acceptanceDurationMet ? 'startCompletionMode' : null,
     };
   }
 
@@ -95,7 +109,7 @@ export class GamingMode extends AnimationMode {
     const { fireBeat, alpha } = this.beatCalculations(now);
     const { positionDelta, distanceDelta } = this.updateViewerAndSampleDeltas(viewerState);
     const { rotation, cameraX } = this.transformScene(positionDelta, distanceDelta, sceneState, alpha);
-    const { grayscalePbrNoiseBlend, modeChange } = this.blendStateFromRotation(rotation);
+    const { grayscalePbrNoiseBlend, modeChange } = this.blendStateFromRotation(rotation, now);
     return {
       cameraX,
       rotation,
