@@ -5,6 +5,7 @@ uniform float pbrColorBlend;
 uniform float captureBlend;
 uniform float grayscalePbrNoiseBlend;
 uniform float time;
+uniform vec2 resolution;
 varying vec2 vUv;
 
 float hash(vec2 seed) {
@@ -19,7 +20,8 @@ void main() {
   vec3 pbrWithColor = mix(vec3(pbrValue), pbr, pbrColorBlend);
   vec3 pbrOrCapture = mix(pbrWithColor, capture, captureBlend);
 
-  float rand = hash(vUv + fract(time));
+  vec2 pixelUv = floor(vUv * resolution) / resolution;
+  float rand = hash(pixelUv + fract(time));
   vec3 finalColor = grayscalePbrNoiseBlend > rand ? pbrOrCapture : noise;
 
   gl_FragColor = vec4(finalColor, 1.0);

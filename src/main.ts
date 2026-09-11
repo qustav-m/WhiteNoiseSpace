@@ -16,7 +16,6 @@ let landmarker!: FaceLandmarker;
 let modeController!: ModeController;
 let renderPipeline!: RenderPipeline;
 let sceneLoader!: SceneLoader;
-let resolutionScale: number = 1.0;
 let debugMode: boolean = false;
 let uiHidden: boolean = false;
 
@@ -81,10 +80,10 @@ async function init(): Promise<void> {
   status.textContent = 'Loading models…';
   sceneLoader = new SceneLoader();
   await sceneLoader.firstReady;
-  renderPipeline.setResolution(resolutionScale);
+  renderPipeline.setResolution(1.0);
   modeController.initialize(renderPipeline, sceneLoader);
 
-  window.addEventListener('resize', () => renderPipeline.handleResize(resolutionScale));
+  window.addEventListener('resize', () => renderPipeline.handleResize(1.0));
 
   document.getElementById('slider-bpm')!.addEventListener('input', (e: Event) => {
     const bpm = parseInt((e.target as HTMLInputElement).value);
@@ -92,12 +91,17 @@ async function init(): Promise<void> {
     modeController.setBPM(bpm);
   });
 
-  document.getElementById('slider-res')!.addEventListener('input', (e: Event) => {
-    const input = e.target as HTMLInputElement;
-    resolutionScale = parseInt(input.value) / 100;
-    document.getElementById('res-label')!.textContent = input.value + '%';
-    renderPipeline.setResolution(resolutionScale);
-  });
+  const widthInput = document.getElementById('input-width') as HTMLInputElement;
+  const heightInput = document.getElementById('input-height') as HTMLInputElement;
+  widthInput.value = String(window.innerWidth);
+  heightInput.value = String(window.innerHeight);
+  const applyResolutionFromInputs = () => {
+    const width = parseInt(widthInput.value) || window.innerWidth;
+    const height = parseInt(heightInput.value) || window.innerHeight;
+    renderPipeline.setResolutionPixels(width, height);
+  };
+  widthInput.addEventListener('change', applyResolutionFromInputs);
+  heightInput.addEventListener('change', applyResolutionFromInputs);
 
   const muteButton = document.getElementById('btn-mute') as HTMLButtonElement;
   muteButton.addEventListener('click', () => {

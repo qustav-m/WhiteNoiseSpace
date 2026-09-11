@@ -75,6 +75,7 @@ export class RenderPipeline {
         captureBlend:           { value: 0 },
         grayscalePbrNoiseBlend: { value: 0 },
         time:                   { value: 0 },
+        resolution:             { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
       },
       vertexShader: compositeVertex,
       fragmentShader: compositeFragment,
@@ -105,10 +106,18 @@ export class RenderPipeline {
     return this.currentModel?.noiseObject.quaternion.clone() ?? new THREE.Quaternion();
   }
 
-  setResolution(scale: number): void {
-    const width: number = Math.max(1, Math.round(window.innerWidth * scale));
-    const height: number = Math.max(1, Math.round(window.innerHeight * scale));
+  setResolutionPixels(width: number, height: number): void {
+    this.applyResolution(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
+  }
 
+  setResolution(scale: number): void {
+    this.applyResolution(
+      Math.max(1, Math.round(window.innerWidth * scale)),
+      Math.max(1, Math.round(window.innerHeight * scale)),
+    );
+  }
+
+  private applyResolution(width: number, height: number): void {
     this.noiseRenderTarget?.dispose();
     this.pbrRenderTarget?.dispose();
     this.pbrCaptureTarget?.dispose();
@@ -129,6 +138,8 @@ export class RenderPipeline {
 
     this.blitMaterial.uniforms.noiseTexture.value = this.noiseRenderTarget.texture;
     this.blitMaterial.uniforms.captureTexture.value = this.pbrCaptureTarget.texture;
+
+    this.blitMaterial.uniforms.resolution.value.set(width, height);
 
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
