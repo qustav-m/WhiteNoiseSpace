@@ -94,7 +94,7 @@ void main() {
   vec3 Lo = (diffuse + specularDirect) * Li * NdotL;
 
   vec3 reflDir = reflect(-V, N);
-  vec3 envColor = texture2D(envMap, equirectUv(reflDir)).rgb;
+  vec3 envColor = min(texture2D(envMap, equirectUv(reflDir)).rgb, vec3(1.5));
   vec3 envF = fresnelSchlick(NdotV, F0);
   vec3 envSpecular = envF * envColor * (1.0 - roughness) * 0.7;
 
