@@ -139,9 +139,6 @@ export class RenderPipeline {
       magFilter: THREE.LinearFilter,
     });
     this.blitMaterial.uniforms.captureTexture.value = this.pbrCaptureTarget.texture;
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.pbrBgMaterial.uniforms.cameraAspect.value = width / height;
   }
 
   setCompositeGridResolution(width: number, height: number): void {
