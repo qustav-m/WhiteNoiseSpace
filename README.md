@@ -21,7 +21,8 @@ Open [http://localhost:5173](http://localhost:5173) in a browser with webcam acc
 - 3D objects (loaded from GLB files) are rendered with an anisotropic white noise shader — statistically identical to the background at rest
 - Head movement tracked via MediaPipe FaceLandmarker rotates the object; the noise shifts with it, making the shape visible through motion
 - As the object approaches upright, a grayscale PBR render fades in through the noise
-- When upright (within 10° for 500ms), a completion sequence auto-rotates the object to face the camera and fades in full color; the next object loads in the background, then a fade to noise transitions to the next round
+- The required precision adapts: the acceptance angle shrinks the longer the viewer watches, making completion harder to trigger over time (charge/discharge model — drains when face is lost)
+- When upright long enough, a completion sequence auto-rotates the object to face the camera and fades in full color; the next object loads in the background, then a fade to noise transitions to the next round
 
 ## Configuration
 
