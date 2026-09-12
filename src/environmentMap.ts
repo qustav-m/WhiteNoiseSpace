@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
-import exrUrl from '../environmentMap/environmentMap.exr?url';
+import exrUrl from '../environmentMap/sky_envmap.exr?url';
 
 let environmentMap: THREE.Texture | null = null;
 
