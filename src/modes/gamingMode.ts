@@ -6,7 +6,7 @@ export class GamingMode extends AnimationMode {
   // acceptanceAngleFromAttentionTime
   private static readonly minAcceptanceAngle: number = 5;  // degrees, hardest
   private static readonly maxAcceptanceAngle: number = 90; // degrees, easiest
-  private static readonly halfLife: number = 60*1000; // ms
+  private static readonly halfLife: number = 20*1000; // ms
 
   // blendStateFromRotation
   private static readonly acceptanceDuration: number = 500; // ms
