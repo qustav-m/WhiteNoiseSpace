@@ -1,19 +1,13 @@
 export class AudioPlayer {
   private static readonly tickFrequency: number = 60;
 
-  private context: AudioContext; // shared browser audio engine
-  private buffer: AudioBuffer; // decoded audio file in memory
-  private gainNode: GainNode; // volume control node in the signal chain
-  private source: AudioBufferSourceNode | null = null; // currently playing source (null when stopped)
+  private readonly context: AudioContext;
+  private readonly buffer: AudioBuffer; // decoded audio file in memory
+  private readonly gainNode: GainNode; // master volume control, driven by game state via setGain()
+  private sources: AudioBufferSourceNode[] = []; // all currently active playback nodes
 
   private gainValue: number = 0; // desired gain, set externally via setGain()
-  private intervalId: number = -1; // handle for the gain loop interval
-  private loopEnabled: boolean = false; // whether the track loops
-  private loopEnd: number = 0; // loop point in seconds
-
-  private startTime: number = 0; // AudioContext time when current playback started
-  private pauseOffset: number = 0; // playback position saved on stop(), used by resume()
-  private playing: boolean = false; // true while source is running
+  private intervalId: number = -1; // handle for the gain smoothing interval
 
   static async load(context: AudioContext, url: string): Promise<AudioPlayer> {
     const buffer = await context.decodeAudioData(await (await fetch(url)).arrayBuffer());
@@ -23,11 +17,9 @@ export class AudioPlayer {
   private constructor(context: AudioContext, buffer: AudioBuffer) {
     this.context = context;
     this.buffer = buffer;
-
     this.gainNode = context.createGain();
     this.gainNode.gain.value = 0;
     this.gainNode.connect(context.destination);
-
     this.startGainLoop();
   }
 
@@ -42,58 +34,47 @@ export class AudioPlayer {
     }, 1000 / AudioPlayer.tickFrequency);
   }
 
-  private createSource(offset: number): void {
-    this.source = this.context.createBufferSource();
-    this.source.buffer = this.buffer;
-    if (this.loopEnabled) {
-      this.source.loop = true;
-      this.source.loopStart = 0;
-      this.source.loopEnd = this.loopEnd;
+  private addSource(loopLength?: number, delaySeconds: number = 0): void {
+    const source = this.context.createBufferSource();
+    source.buffer = this.buffer;
+    if (loopLength !== undefined) {
+      source.loop = true;
+      source.loopStart = 0;
+      source.loopEnd = loopLength;
     }
-    this.source.connect(this.gainNode);
-    this.source.start(0, offset);
-    this.startTime = this.context.currentTime - offset;
-    this.playing = true;
-    this.source.onended = () => {
-      this.playing = false;
-      this.source = null;
-    };
+    source.connect(this.gainNode);
+    source.start(this.context.currentTime + delaySeconds);
+    source.onended = () => { this.sources = this.sources.filter(s => s !== source); };
+    this.sources.push(source);
   }
 
+  private stopAll(): void {
+    const toStop = this.sources;
+    this.sources = []; // clear first so onended callbacks see an empty array
+    for (const source of toStop) {
+      try { source.stop(); } catch {} // guard against sources that already ended naturally
+    }
+  }
+
+  // One-shot playback — restarts from the beginning each call. Used for drum hits.
   play(): void {
-    if (this.source) {
-      this.source.stop();
-      this.source = null;
-    }
-    this.pauseOffset = 0;
-    this.createSource(0);
+    this.stopAll();
+    this.addSource();
   }
 
-  stop(): void {
-    if (!this.source) return;
-    const elapsed = this.context.currentTime - this.startTime;
-    this.pauseOffset = this.loopEnabled && this.loopEnd > 0
-      ? elapsed % this.loopEnd
-      : Math.min(elapsed, this.buffer.duration);
-    const source = this.source;
-    this.source = null;
-    this.playing = false;
-    source.stop();
-  }
-
-  resume(): void {
-    if (this.playing) return;
-    this.createSource(this.pauseOffset);
-  }
-
+  // Native loop at loopEnd seconds. Has a click at the loop boundary if the waveform is non-zero there.
   loop(loopEnd: number): void {
-    this.loopEnabled = true;
-    this.loopEnd = loopEnd;
-    if (this.source) {
-      this.source.loop = true;
-      this.source.loopStart = 0;
-      this.source.loopEnd = loopEnd;
-    }
+    this.stopAll();
+    this.addSource(loopEnd);
+  }
+
+  // Two looping sources offset by loopLength/2, creating a seamless alternating loop.
+  // The audio file must have fade-in/out baked in, padded with silence so that
+  // loopLength = 2 * (audioLength - overlapDuration).
+  loopDual(loopLength: number): void {
+    this.stopAll();
+    this.addSource(loopLength, 0);
+    this.addSource(loopLength, loopLength / 2);
   }
 
   setGain(value: number): void {
@@ -102,7 +83,7 @@ export class AudioPlayer {
 
   dispose(): void {
     clearInterval(this.intervalId);
-    this.source?.stop();
+    this.stopAll();
     this.gainNode.disconnect();
   }
 }

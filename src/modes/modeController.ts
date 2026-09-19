@@ -137,7 +137,7 @@ export class ModeController {
       this.drumPlayer.play();
     }
     if (this.noisePlayer) {
-      this.noisePlayer.setGain(this.muted ? 0 : frame.noiseGain);
+      this.noisePlayer.setGain(this.muted ? 0 : Math.min(frame.noiseGain, 0.4));
     }
 
     this.renderPipeline.setBlends(frame.grayscalePbrNoiseBlend, frame.pbrColorBlend, frame.captureBlend);

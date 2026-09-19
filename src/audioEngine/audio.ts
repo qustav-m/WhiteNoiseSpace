@@ -11,8 +11,7 @@ export async function initAudio(): Promise<{ noisePlayer: AudioPlayer; drumPlaye
     AudioPlayer.load(audioContext, noiseUrl),
     AudioPlayer.load(audioContext, drumUrl),
   ]);
-  noisePlayer.loop(4);
-  noisePlayer.play();
-  drumPlayer.setGain(1);
+  noisePlayer.loopDual(8);
+  drumPlayer.setGain(0.4);
   return { noisePlayer, drumPlayer };
 }

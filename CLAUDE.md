@@ -42,7 +42,7 @@ npm start              # dev server at http://localhost:5173
 | [src/modes/modeController.ts](src/modes/modeController.ts) | Orchestrates modes, applies `FrameState` to scene, manages game loop |
 | [src/audioEngine/audio.ts](src/audioEngine/audio.ts) | Audio setup: noise player + drum player |
 | [src/audioEngine/audioPlayer.ts](src/audioEngine/audioPlayer.ts) | `AudioPlayer` — loads and plays an audio buffer with gain control |
-| [audio/noise.mp3](audio/noise.mp3) | Looped noise sound, gain driven by rotation speed |
+| [audio/noise.mp3](audio/noise.mp3) | Looped noise sound, gain driven by rotation speed. Must have fade-in/out baked in and silence padding: `loopLength = 2 * (audioLength - overlapDuration)` |
 | [audio/drumHit.mp3](audio/drumHit.mp3) | One-shot beat sound, fired on each beat in game phase |
 | [src/shader/noise-shader/vertex.glsl](src/shader/noise-shader/vertex.glsl) | Noise vertex shader — passes triangle attributes |
 | [src/shader/noise-shader/fragment.glsl](src/shader/noise-shader/fragment.glsl) | Anisotropic noise fragment shader |
@@ -68,7 +68,7 @@ Screen fixed at origin, screen normal = +x
 
 ### Game loop
 
-1. **Gaming phase (`gamingMode`)** — object starts at a random rotation where local up is far from world up (60°–120° from upright). Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed. The acceptance angle shrinks from `maxAcceptanceAngle` (90°, easy) toward `minAcceptanceAngle` (5°, hard) as cumulative viewer attention time increases, following a half-life curve with `halfLife` (6s). Completion triggers when the angle stays below the current acceptance angle continuously for `acceptanceDuration` (500ms). Viewer attention charges while the face is detected and drains when not detected.
+1. **Gaming phase (`gamingMode`)** — object starts at a random rotation where local up is far from world up (60°–120° from upright). Head movement rotates the object. The noise/PBR blend is driven by the angle between the object's local up and world up. Beat timing gates movement weight. Noise audio plays proportional to head movement speed. The acceptance angle shrinks from `maxAcceptanceAngle` (90°, easy) toward `minAcceptanceAngle` (5°, hard) as cumulative viewer attention time increases, following a half-life curve with `halfLife` (60s). Completion triggers when the angle stays below the current acceptance angle continuously for `acceptanceDuration` (500ms). Viewer attention charges while the face is detected and drains when not detected.
 
 2. **Completion phase (`completionMode`)** — object auto-rotates toward upright (identity quaternion) + camera-facing, camera lerps to `targetCameraX` (0.5), saturation fades in over `activeDuration` (3000ms).
 
@@ -199,12 +199,13 @@ Each mode file defines its own `interpolationCurve(t: number): number` at the to
 
 ### Audio (`audio.ts`, `audioPlayer.ts`)
 
-`AudioPlayer` wraps a decoded `AudioBuffer` with a `GainNode`. `initAudio()` loads two players: noise (looped) and drum (one-shot).
+`AudioPlayer` wraps a decoded `AudioBuffer` with a master `GainNode` and a pool of active `AudioBufferSourceNode`s. `initAudio()` loads two players: noise (dual-loop) and drum (one-shot).
 
-- **Noise gain** — set every frame from `frame.noiseGain`; proportional to movement speed. Ramped smoothly via `cancelAndHoldAtTime` + `linearRampToValueAtTime`.
-- **Drum** — fired on `frame.fireBeat` (gaming phase only, beat-synced).
+- **Noise** — uses `loopDual(loopLength)`: two sources offset by `loopLength/2` loop the same buffer simultaneously. Crossfade is baked into the audio file (fade-in/out + silence padding). Gain capped at 0.4, set every frame from `frame.noiseGain` proportional to movement speed.
+- **Drum** — fired on `frame.fireBeat` (gaming phase only, beat-synced). `play()` stops any previous source and starts a new one-shot.
+- **Gain smoothing** — `setTargetAtTime` with time constant 0.1s approaches `gainValue` each tick; `cancelAndHoldAtTime` prevents jumps.
 
-Signal chain: `source → gainNode → destination`
+Signal chain: `sources[] → gainNode → destination`
 
 ### Style guide
 

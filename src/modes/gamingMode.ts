@@ -6,7 +6,7 @@ export class GamingMode extends AnimationMode {
   // acceptanceAngleFromAttentionTime
   private static readonly minAcceptanceAngle: number = 5;  // degrees, hardest
   private static readonly maxAcceptanceAngle: number = 90; // degrees, easiest
-  private static readonly halfLife: number = 6*1000; // ms
+  private static readonly halfLife: number = 60*1000; // ms
 
   // blendStateFromRotation
   private static readonly acceptanceDuration: number = 500; // ms
@@ -59,7 +59,7 @@ export class GamingMode extends AnimationMode {
 
   // uses: beatInterval
   private beatCalculations(now: number): { fireBeat: boolean; alpha: number } {
-    if (this.lastBeatTime < 0) this.lastBeatTime = now;
+    if (this.lastBeatTime < 0) this.lastBeatTime = now - this.beatInterval; // lazy init: fire beat immediately on first frame
     const cycleTimeFraction: number = (now - this.lastBeatTime) / this.beatInterval;
     let fireBeat: boolean = false;
     if (cycleTimeFraction >= 1) {
