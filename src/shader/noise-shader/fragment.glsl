@@ -56,7 +56,7 @@ int getIndex(int x, int y, int s) {
     return 0;
 }
 
-// Inverse CDF of mix(A,B,t) when A and B are uniform [0,1].
+// CDF of mix(A,B,t) when A and B are uniform [0,1].
 float uniformize(float z, float t) {
     float lo = min(t, 1.0 - t);
     float hi = max(t, 1.0 - t);
