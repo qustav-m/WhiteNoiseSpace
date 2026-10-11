@@ -2,19 +2,43 @@
 
 An interactive browser game where 3D objects are hidden in procedural white noise and only become visible through motion. The viewer's face — tracked in real time via webcam — rotates the object, making the noise shift and reveal its shape. Once upright, a color reveal sequence plays before the next object loads.
 
+> **Git LFS required** — large files (3D models, environment map) are stored with Git LFS. Install it before cloning: `brew install git-lfs && git lfs install`. If you already cloned without it, run `git lfs pull` afterwards.
+
 ## Setup
+
+One-time installation:
 
 ```bash
 npm install
-bash download_model.sh   # downloads face detection model (~8MB, one-time)
-npm start                # dev server at http://localhost:5173
+bash download_model.sh   # downloads face detection model (~8MB)
 ```
 
-**Environment map** — not included (67 MB). Place an equirectangular EXR as `environmentMap/environmentMap.exr`. Any HDR from [Poly Haven](https://polyhaven.com/hdris) works; download as EXR at any resolution.
+## Running the dev server
 
-> **3D models are not included in this repository.** Add GLB files to a `scenes/` folder in the project root — they will be picked up automatically. Per-model scale and rotation can be configured in `src/sceneConfig.ts`.
+```bash
+npm start
+```
 
-Open [http://localhost:5173](http://localhost:5173) in a browser with webcam access.
+Vite prints the local URL in the terminal — open it in a browser with webcam access.
+
+Stop the server with `Ctrl+C` in the terminal. If you closed the terminal without stopping it, kill it by port number:
+
+```bash
+kill $(lsof -t -i :port_number)
+```
+
+## UI controls
+
+UI lives in a black panel on the right side of the screen. Press `i` to hide/show it.
+
+- **mute button** — silences all audio
+- **BPM slider** — sets beat timing for head movement gating
+- **noise w/h** — render target pixel dimensions for the noise shader
+- **pbr w/h** — render target pixel dimensions for the PBR shader
+- **grid w/h** — stochastic composite grid size (cells that flip together); copy noise → grid button syncs them
+- **`d` key** — toggle debug mode (shows objects in PBR at identity rotation, no noise)
+- **`n` key** — cycle to next model (debug mode only)
+- **`i` key** — toggle UI panel visibility
 
 ## How it works
 
@@ -38,19 +62,6 @@ const overrides: Record<string, SceneOverride> = {
 setUpDefault(); // MacBook Pro 14" M3, webcam at top center of screen
 // setUpHome(); // external monitor, offset webcam
 ```
-
-## UI controls
-
-UI lives in a black panel on the right side of the screen. Press `i` to hide/show it.
-
-- **mute button** — silences all audio
-- **BPM slider** — sets beat timing for head movement gating
-- **noise w/h** — render target pixel dimensions for the noise shader
-- **pbr w/h** — render target pixel dimensions for the PBR shader
-- **grid w/h** — stochastic composite grid size (cells that flip together); copy noise → grid button syncs them
-- **`d` key** — toggle debug mode (shows objects in PBR at identity rotation, no noise)
-- **`n` key** — cycle to next model (debug mode only)
-- **`i` key** — toggle UI panel visibility
 
 ## Architecture
 
@@ -88,3 +99,7 @@ webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderP
 - Custom anisotropic noise GLSL shader (see `noiseShader.md`)
 - Custom Cook-Torrance PBR GLSL shader with equirectangular EXR env map
 - Web Audio API — looped noise + beat-synced drum
+
+**new 3D models.** 
+
+Add GLB files to the `scenes/` folder in the project root — they will be picked up automatically. Per-model scale and rotation can be configured in `src/sceneConfig.ts`.
