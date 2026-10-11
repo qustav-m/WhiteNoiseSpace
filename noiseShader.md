@@ -1,6 +1,10 @@
 # Anisotropic noise shader
 
-Procedural white noise bound to 3D geometry. Statistically uniform at every viewing angle and distance — at grazing angles the screen-pixel footprint becomes a thin ellipse over the triangle, and the shader samples along that ellipse so the result stays white rather than going grey.
+Procedural white noise bound to 3D geometry. Statistically uniform at every viewing angle and distance.
+
+The shader uses **EWA filtering** (Elliptical Weighted Average): the Jacobian of the UV mapping maps the screen-pixel footprint to an ellipse in texture space. The minor axis length determines the mip level; multiple anisotropic taps are taken along the major axis to cover the full footprint without undersampling at grazing angles.
+
+To preserve statistical uniformity when averaging multiple noise samples, the shader applies the **probability integral transform**: each intermediate average is passed through the forward CDF of the mixture distribution (`uniformize`), which maps the result back to a uniform distribution on [0, 1]. Without this, mixing uniform samples causes the variance to collapse toward the mean.
 
 ## Files
 

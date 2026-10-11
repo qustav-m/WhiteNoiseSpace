@@ -42,15 +42,15 @@ UI lives in a black panel on the right side of the screen. Press `i` to hide/sho
 
 ## How it works
 
-- 3D objects (loaded from GLB files) are rendered with an anisotropic white noise shader — statistically identical to the background at rest
-- Head movement tracked via MediaPipe FaceLandmarker rotates the object; the noise shifts with it, making the shape visible through motion
+- 3D objects are rendered with a custom procedural white noise texture using EWA filtering, producing frames that are statistically indistinguishable from a screen filled with white noise. Since natural patterns in the noise from the textures are bound to the object's surface, these patterns move with the object — making shape and the object in general only visible when in motion
+- Head movement tracked via MediaPipe FaceLandmarker rotates the object
 - As the object approaches upright, a grayscale PBR render fades in through the noise
-- The required precision adapts: the acceptance angle shrinks the longer the viewer watches, making completion harder to trigger over time (charge/discharge model — drains when face is lost)
+- The required precision adapts: the acceptance angle shrinks the longer the viewer watches, making completion easier to trigger over time (charge/discharge model — drains when face is lost)
 - When upright long enough, a completion sequence auto-rotates the object to face the camera and fades in full color; the next object loads in the background, then a fade to noise transitions to the next round
 
 ## Configuration
 
-**Per-model scale and rotation** — edit `sceneConfig.ts`:
+**Adding new models** — place GLB files in the `scenes/` folder; they are picked up automatically. Per-model scale and rotation can be configured in `src/sceneConfig.ts`:
 ```ts
 const overrides: Record<string, SceneOverride> = {
   'myObject.glb': { scale: 1.5, rotationX: 90 },
@@ -100,6 +100,3 @@ webcam → MediaPipe FaceLandmarker → viewer.ts → ModeController → RenderP
 - Custom Cook-Torrance PBR GLSL shader with equirectangular EXR env map
 - Web Audio API — looped noise + beat-synced drum
 
-**new 3D models.** 
-
-Add GLB files to the `scenes/` folder in the project root — they will be picked up automatically. Per-model scale and rotation can be configured in `src/sceneConfig.ts`.
