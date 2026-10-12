@@ -21,6 +21,14 @@ npm start
 
 Vite prints the local URL in the terminal — open it in a browser with webcam access.
 
+## Before playing
+
+Click the **unmute** button in the settings panel to enable audio. Hide the panel with the `i` key.
+
+If there is still no sound, check that your browser allows audio for this page in the browser settings.
+
+## Stopping the dev server
+
 Stop the server with `Ctrl+C` in the terminal. If you closed the terminal without stopping it, kill it by port number:
 
 ```bash
@@ -45,7 +53,7 @@ UI lives in a black panel on the right side of the screen. Press `i` to hide/sho
 - 3D objects are rendered with a custom procedural white noise texture using EWA filtering, producing frames that are statistically indistinguishable from a screen filled with white noise. Since natural patterns in the noise from the textures are bound to the object's surface, these patterns move with the object — making shape and the object in general only visible when in motion
 - Head movement tracked via MediaPipe FaceLandmarker rotates the object
 - As the object approaches upright, a grayscale PBR render fades in through the noise
-- The required precision adapts: the acceptance angle shrinks the longer the viewer watches, making completion easier to trigger over time (charge/discharge model — drains when face is lost)
+- The required precision adapts: the acceptance angle grows the longer the viewer watches, making completion easier to trigger over time (charge/discharge model — drains when face is lost)
 - When upright long enough, a completion sequence auto-rotates the object to face the camera and fades in full color; the next object loads in the background, then a fade to noise transitions to the next round
 
 ## Configuration
