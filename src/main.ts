@@ -7,7 +7,7 @@ import { SceneLoader } from './sceneLoader';
 import { initAudio } from './audioEngine/audio';
 import { initEnvironmentMap } from './environmentMap';
 
-const WASM_PATH: string = './node_modules/@mediapipe/tasks-vision/wasm';
+const WASM_PATH: string = './wasm';
 const MODEL_PATH: string = './models/face_landmarker.task';
 
 let status!: HTMLElement;

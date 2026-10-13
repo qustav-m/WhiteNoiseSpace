@@ -2,7 +2,7 @@
 
 An interactive browser game where 3D objects are hidden in procedural white noise and only become visible through motion. The viewer's face — tracked in real time via webcam — rotates the object, making the noise shift and reveal its shape. Once upright, a color reveal sequence plays before the next object loads.
 
-> **Git LFS required** — large files (3D models, environment map) are stored with Git LFS. Install it before cloning: `brew install git-lfs && git lfs install`. If you already cloned without it, run `git lfs pull` afterwards.
+**Live demo:** [qustav-m.github.io/WhiteNoiseSpace](https://qustav-m.github.io/WhiteNoiseSpace/)
 
 ## Setup
 
@@ -10,7 +10,6 @@ One-time installation:
 
 ```bash
 npm install
-bash download_model.sh   # downloads face detection model (~8MB)
 ```
 
 ## Running the dev server
